@@ -39,12 +39,42 @@ class MercadoLivreAdapter implements MarketplaceAdapter
         $orders = [];
 
         foreach ($results as $orderData) {
+            $itemMaps = [];
+            if (!empty($orderData['order_items'])) {
+                foreach ($orderData['order_items'] as $item) {
+                    $itemMaps[] = [
+                        'external_id' => $item['item']['id'] ?? uniqid(),
+                        'sku' => $item['item']['seller_sku'] ?? null,
+                        'title' => $item['item']['title'] ?? 'Item',
+                        'quantity' => $item['quantity'] ?? 1,
+                        'unit_price' => $item['unit_price'] ?? 0,
+                    ];
+                }
+            }
+
             $orders[] = [
                 'external_id' => $orderData['id'],
-                'status' => $orderData['status'],
-                'total_amount' => $orderData['total_amount'],
-                'buyer_nickname' => $orderData['buyer']['nickname'] ?? null,
+                'pack_id' => $orderData['pack_id'] ?? null,
+                'shipping_id' => $orderData['shipping']['id'] ?? null,
+                'selling_channel' => (isset($orderData['tags']) && in_array('mshops', $orderData['tags'])) ? 'mshops' : 'marketplace',
+                'billing_info_json' => $orderData,
+                'customer_name' => $orderData['buyer']['nickname'] ?? 'Cliente Desconhecido',
+                'billing_doc_type' => $orderData['buyer']['billing_info']['doc_type'] ?? null,
+                'billing_doc_number' => $orderData['buyer']['billing_info']['doc_number'] ?? null,
+                'billing_name' => $orderData['buyer']['first_name'] ?? null,
+                'billing_address_line' => $orderData['buyer']['billing_info']['address'] ?? null,
+                'shipping_address_line' => null,
+                'shipping_city' => null,
+                'shipping_state' => null,
+                'shipping_country' => 'BR',
+                'total_amount' => $orderData['total_amount'] ?? 0,
+                'status' => $orderData['status'] ?? 'unknown',
+                'payment_status' => $orderData['payments'][0]['status'] ?? ($orderData['status'] ?? 'unknown'),
+                'payment_method' => $orderData['payments'][0]['payment_method_id'] ?? 'unknown',
                 'date_created' => CarbonLib::parse($orderData['date_created']),
+                'platform_cost' => 0,
+                'shipping_cost' => 0,
+                'items' => $itemMaps,
                 'raw_data' => $orderData
             ];
         }
@@ -210,12 +240,42 @@ class MercadoLivreAdapter implements MarketplaceAdapter
         $orders = [];
 
         foreach ($results as $orderData) {
+            $itemMaps = [];
+            if (!empty($orderData['order_items'])) {
+                foreach ($orderData['order_items'] as $item) {
+                    $itemMaps[] = [
+                        'external_id' => $item['item']['id'] ?? uniqid(),
+                        'sku' => $item['item']['seller_sku'] ?? null,
+                        'title' => $item['item']['title'] ?? 'Item',
+                        'quantity' => $item['quantity'] ?? 1,
+                        'unit_price' => $item['unit_price'] ?? 0,
+                    ];
+                }
+            }
+
             $orders[] = [
                 'external_id' => $orderData['id'],
-                'status' => $orderData['status'],
-                'total_amount' => $orderData['total_amount'],
-                'buyer_nickname' => $orderData['buyer']['nickname'] ?? null,
+                'pack_id' => $orderData['pack_id'] ?? null,
+                'shipping_id' => $orderData['shipping']['id'] ?? null,
+                'selling_channel' => (isset($orderData['tags']) && in_array('mshops', $orderData['tags'])) ? 'mshops' : 'marketplace',
+                'billing_info_json' => $orderData,
+                'customer_name' => $orderData['buyer']['nickname'] ?? 'Cliente Desconhecido',
+                'billing_doc_type' => $orderData['buyer']['billing_info']['doc_type'] ?? null,
+                'billing_doc_number' => $orderData['buyer']['billing_info']['doc_number'] ?? null,
+                'billing_name' => $orderData['buyer']['first_name'] ?? null,
+                'billing_address_line' => $orderData['buyer']['billing_info']['address'] ?? null,
+                'shipping_address_line' => null,
+                'shipping_city' => null,
+                'shipping_state' => null,
+                'shipping_country' => 'BR',
+                'total_amount' => $orderData['total_amount'] ?? 0,
+                'status' => $orderData['status'] ?? 'unknown',
+                'payment_status' => $orderData['payments'][0]['status'] ?? ($orderData['status'] ?? 'unknown'),
+                'payment_method' => $orderData['payments'][0]['payment_method_id'] ?? 'unknown',
                 'date_created' => CarbonLib::parse($orderData['date_created']),
+                'platform_cost' => 0,
+                'shipping_cost' => 0,
+                'items' => $itemMaps,
                 'raw_data' => $orderData
             ];
         }
