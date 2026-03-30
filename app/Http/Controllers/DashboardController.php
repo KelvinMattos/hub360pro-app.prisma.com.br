@@ -77,6 +77,11 @@ class DashboardController extends Controller
         // 5. Métricas de Marketing (Adivs)
         $marketingMetrics = $this->marketingService->forCompany($companyId)->getMetrics();
 
+        // 6. Integrações Ativas (Garantir que conta apenas as autorizadas)
+        $integrationsCount = \App\Models\Integration::where('company_id', $companyId)
+            ->whereNotNull('access_token')
+            ->count();
+
         return Inertia::render('Dashboard', [
             'metrics' => [
                 'sales' => [
@@ -92,7 +97,8 @@ class DashboardController extends Controller
                     'active' => $productsActive,
                     'paused' => $productsPaused,
                     'out_of_stock' => $productsOutOfStock,
-                    'alerts' => $inventoryAlerts
+                    'alerts' => $inventoryAlerts,
+                    'total_integrations' => $integrationsCount
                 ],
                 'marketing' => $marketingMetrics
             ],

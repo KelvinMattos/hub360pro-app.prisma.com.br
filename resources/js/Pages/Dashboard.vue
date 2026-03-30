@@ -3,7 +3,7 @@
         <div class="p-10 max-w-[1600px] mx-auto min-h-screen">
             <!-- Onboarding para novos usuários -->
             <div v-if="metrics.inventory.active === 0" class="flex flex-col items-center justify-center min-h-[70vh]">
-                <WelcomeOnboarding />
+                <WelcomeOnboarding :integrations-count="metrics.inventory.total_integrations" />
             </div>
 
             <!-- Dashboard Real (Só aparece se houver dados ativos) -->
