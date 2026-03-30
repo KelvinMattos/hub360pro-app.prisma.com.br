@@ -77,13 +77,10 @@ class MercadoLivreApiService
         }
 
         $response = Http::withToken($this->credential->access_token)
-            ->retry(3, 2000, function ($exception, $request) {
-            // Tenta novamente apenas se for erro de Rate Limit (429)
-            return $exception instanceof \Illuminate\Http\Client\RequestException && $exception->response->status() === 429;
-        })
             ->$method($this->baseUrl . $endpoint, $options);
 
         // Se falhar com 401, tenta renovar o token e repetir uma única vez
+        // Nota: 401 não entra no retry acima porque não é 429.
         if ($response->status() === 401) {
             Log::warning("Meli Request 401: Token inválido. Tentando refresh e retry para Company: {$this->credential->company_id}");
             if ($this->refreshToken()) {
@@ -128,41 +125,56 @@ class MercadoLivreApiService
 
         Log::info("Renovando token Mercado Livre para Company: {$this->credential->company_id}");
 
-        try {
-            $response = Http::asForm()
-                ->retry(3, 3000, function ($exception, $request) {
-                    // Retenta em caso de erro 429 ou exceção de rede
-                    return $exception instanceof \Illuminate\Http\Client\RequestException && 
-                           ($exception->response->status() === 429 || $exception->response->status() >= 500);
-                })
-                ->post($this->baseUrl . '/oauth/token', [
+        $attempts = 0;
+        $maxAttempts = 3;
+
+        while ($attempts < $maxAttempts) {
+            try {
+                $response = Http::asForm()->post($this->baseUrl . '/oauth/token', [
                     'grant_type' => 'refresh_token',
                     'client_id' => $clientId,
                     'client_secret' => $clientSecret,
                     'refresh_token' => $refreshToken,
                 ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
+                if ($response->successful()) {
+                    $data = $response->json();
 
-                $this->credential->update([
-                    'access_token' => $data['access_token'],
-                    'refresh_token' => $data['refresh_token'],
-                    'expires_at' => now()->addSeconds($data['expires_in']),
-                    'token_expires_at' => now()->addSeconds($data['expires_in']),
-                    'seller_id' => $data['user_id'] ?? $this->credential->seller_id,
-                ]);
+                    $this->credential->update([
+                        'access_token' => $data['access_token'],
+                        'refresh_token' => $data['refresh_token'],
+                        'expires_at' => now()->addSeconds($data['expires_in']),
+                        'token_expires_at' => now()->addSeconds($data['expires_in']),
+                        'seller_id' => $data['user_id'] ?? $this->credential->seller_id,
+                    ]);
 
-                Log::info("Token renovado com sucesso!");
-                return true;
-            } else {
+                    Log::info("Token renovado com sucesso!");
+                    return true;
+                }
+
+                // Se for Rate Limit (429), tenta novamente após um pequeno delay
+                if ($response->status() === 429 && $attempts < $maxAttempts - 1) {
+                    $attempts++;
+                    Log::warning("Meli Token Refresh: Rate limit (429) atingido. Tentativa {$attempts} de {$maxAttempts}. Aguardando...");
+                    sleep(1); // Aguarda 1 segundo antes da próxima tentativa
+                    continue;
+                }
+
                 Log::error("Falha ao renovar token ML: " . $response->body());
                 return false;
+
+            } catch (\Exception $e) {
+                $attempts++;
+                if ($attempts >= $maxAttempts) {
+                    Log::error("Exceção ao renovar token ML: " . $e->getMessage());
+                    return false;
+                }
+                Log::warning("Exceção ao renovar token ML. Tentativa {$attempts} de {$maxAttempts}. Erro: " . $e->getMessage());
+                sleep(1);
             }
-        } catch (\Exception $e) {
-            Log::error("Exceção ao renovar token ML: " . $e->getMessage());
-            return false;
         }
+
+        return false;
     }
 
     /**
