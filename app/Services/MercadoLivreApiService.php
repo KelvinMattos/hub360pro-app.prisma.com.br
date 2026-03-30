@@ -21,6 +21,7 @@ class MercadoLivreApiService
     {
         $this->credential = Integration::where('company_id', $companyId)
             ->whereIn('platform', ['mercadolibre', 'mercadolivre'])
+            ->orderByRaw('access_token IS NULL ASC') // Prefer records with tokens
             ->first();
 
         return $this;
