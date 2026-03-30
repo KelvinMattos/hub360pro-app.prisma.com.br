@@ -1,0 +1,960 @@
+Loading composer repositories with package information
+Package "" listed for update is not locked.
+Updating dependencies
+Lock file operations: 2 installs, 0 updates, 0 removals
+  - Locking inertiajs/inertia-laravel (v2.0.22)
+  - Locking tightenco/ziggy (v2.6.2)
+Writing lock file
+Installing dependencies from lock file (including require-dev)
+Package operations: 154 installs, 0 updates, 0 removals
+    Failed to download voku/portable-ascii from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing voku/portable-ascii (2.0.3) into cache
+    Failed to download symfony/polyfill-php80 from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/polyfill-php80 (v1.33.0) into cache
+    Failed to download symfony/polyfill-mbstring from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/polyfill-mbstring (v1.33.0) into cache
+    Failed to download symfony/polyfill-ctype from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/polyfill-ctype (v1.33.0) into cache
+    Failed to download phpoption/phpoption from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing phpoption/phpoption (1.9.5) into cache
+    Failed to download graham-campbell/result-type from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing graham-campbell/result-type (v1.1.4) into cache
+    Failed to download vlucas/phpdotenv from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing vlucas/phpdotenv (v5.6.3) into cache
+    Failed to download symfony/css-selector from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/css-selector (v7.0.0) into cache
+    Failed to download tijsverkoyen/css-to-inline-styles from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing tijsverkoyen/css-to-inline-styles (v2.4.0) into cache
+    Failed to download symfony/deprecation-contracts from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/deprecation-contracts (v3.6.0) into cache
+    Failed to download symfony/var-dumper from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/var-dumper (v7.4.6) into cache
+    Failed to download symfony/polyfill-uuid from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/polyfill-uuid (v1.33.0) into cache
+    Failed to download symfony/uid from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/uid (v7.4.4) into cache
+    Failed to download symfony/routing from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/routing (v7.4.6) into cache
+    Failed to download symfony/process from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/process (v7.4.5) into cache
+    Failed to download symfony/polyfill-php83 from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/polyfill-php83 (v1.33.0) into cache
+    Failed to download symfony/polyfill-intl-normalizer from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/polyfill-intl-normalizer (v1.33.0) into cache
+    Failed to download symfony/polyfill-intl-idn from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/polyfill-intl-idn (v1.33.0) into cache
+    Failed to download symfony/mime from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/mime (v7.4.6) into cache
+    Failed to download psr/container from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing psr/container (2.0.2) into cache
+    Failed to download symfony/service-contracts from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/service-contracts (v3.6.1) into cache
+    Failed to download psr/event-dispatcher from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing psr/event-dispatcher (1.0.0) into cache
+    Failed to download symfony/event-dispatcher-contracts from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/event-dispatcher-contracts (v3.6.0) into cache
+    Failed to download symfony/event-dispatcher from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/event-dispatcher (v7.3.0) into cache
+    Failed to download psr/log from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing psr/log (3.0.2) into cache
+    Failed to download doctrine/lexer from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing doctrine/lexer (3.0.1) into cache
+    Failed to download egulias/email-validator from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing egulias/email-validator (4.0.4) into cache
+    Failed to download symfony/mailer from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/mailer (v7.4.6) into cache
+    Failed to download symfony/http-foundation from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/http-foundation (v7.4.6) into cache
+    Failed to download symfony/polyfill-php85 from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/polyfill-php85 (v1.33.0) into cache
+    Failed to download symfony/error-handler from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/error-handler (v7.4.4) into cache
+    Failed to download symfony/http-kernel from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/http-kernel (v7.4.6) into cache
+    Failed to download symfony/finder from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/finder (v7.4.6) into cache
+    Failed to download symfony/polyfill-intl-grapheme from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/polyfill-intl-grapheme (v1.33.0) into cache
+    Failed to download symfony/string from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/string (v7.2.0) into cache
+    Failed to download symfony/console from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/console (v7.4.6) into cache
+    Failed to download ramsey/collection from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing ramsey/collection (2.1.1) into cache
+    Failed to download brick/math from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing brick/math (0.14.8) into cache
+    Failed to download ramsey/uuid from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing ramsey/uuid (4.9.2) into cache
+    Failed to download psr/simple-cache from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing psr/simple-cache (3.0.0) into cache
+    Failed to download nunomaduro/termwind from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing nunomaduro/termwind (v2.4.0) into cache
+    Failed to download symfony/translation-contracts from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/translation-contracts (v3.6.1) into cache
+    Failed to download symfony/translation from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/translation (v7.0.0) into cache
+    Failed to download psr/clock from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing psr/clock (1.0.0) into cache
+    Failed to download symfony/clock from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/clock (v7.0.0) into cache
+    Failed to download carbonphp/carbon-doctrine-types from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing carbonphp/carbon-doctrine-types (3.2.0) into cache
+    Failed to download nesbot/carbon from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing nesbot/carbon (3.8.4) into cache
+    Failed to download monolog/monolog from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing monolog/monolog (3.10.0) into cache
+    Failed to download psr/http-message from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing psr/http-message (2.0) into cache
+    Failed to download psr/http-factory from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing psr/http-factory (1.1.0) into cache
+    Failed to download league/uri-interfaces from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing league/uri-interfaces (7.8.0) into cache
+    Failed to download league/uri from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing league/uri (7.8.0) into cache
+    Failed to download league/mime-type-detection from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing league/mime-type-detection (1.16.0) into cache
+    Failed to download league/flysystem-local from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing league/flysystem-local (3.31.0) into cache
+    Failed to download league/flysystem from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing league/flysystem (3.32.0) into cache
+    Failed to download nette/utils from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing nette/utils (v4.1.3) into cache
+    Failed to download nette/schema from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing nette/schema (v1.3.5) into cache
+    Failed to download dflydev/dot-access-data from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing dflydev/dot-access-data (v3.0.3) into cache
+    Failed to download league/config from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing league/config (v1.2.0) into cache
+    Failed to download league/commonmark from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing league/commonmark (2.8.0) into cache
+    Failed to download laravel/serializable-closure from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing laravel/serializable-closure (v2.0.10) into cache
+    Failed to download laravel/prompts from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing laravel/prompts (v0.3.13) into cache
+    Failed to download guzzlehttp/uri-template from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing guzzlehttp/uri-template (v1.0.5) into cache
+    Failed to download psr/http-client from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing psr/http-client (1.0.3) into cache
+    Failed to download ralouphie/getallheaders from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing ralouphie/getallheaders (3.0.3) into cache
+    Failed to download guzzlehttp/psr7 from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing guzzlehttp/psr7 (2.8.0) into cache
+    Failed to download guzzlehttp/promises from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing guzzlehttp/promises (2.3.0) into cache
+    Failed to download guzzlehttp/guzzle from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing guzzlehttp/guzzle (7.10.0) into cache
+    Failed to download fruitcake/php-cors from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing fruitcake/php-cors (v1.4.0) into cache
+    Failed to download dragonmantank/cron-expression from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing dragonmantank/cron-expression (v3.6.0) into cache
+    Failed to download doctrine/inflector from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing doctrine/inflector (2.1.0) into cache
+    Failed to download laravel/framework from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing laravel/framework (v11.48.0) into cache
+    Failed to download anourvalar/eloquent-serialize from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing anourvalar/eloquent-serialize (1.3.5) into cache
+    Failed to download blade-ui-kit/blade-icons from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing blade-ui-kit/blade-icons (1.9.0) into cache
+    Failed to download blade-ui-kit/blade-heroicons from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing blade-ui-kit/blade-heroicons (2.6.0) into cache
+    Failed to download clue/redis-protocol from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing clue/redis-protocol (v0.3.2) into cache
+    Failed to download danharrin/date-format-converter from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing danharrin/date-format-converter (v0.3.1) into cache
+    Failed to download psr/cache from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing psr/cache (3.0.0) into cache
+    Failed to download doctrine/deprecations from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing doctrine/deprecations (1.1.6) into cache
+    Failed to download doctrine/dbal from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing doctrine/dbal (4.4.2) into cache
+    Failed to download fakerphp/faker from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing fakerphp/faker (v1.24.1) into cache
+    Failed to download spatie/laravel-package-tools from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing spatie/laravel-package-tools (1.93.0) into cache
+    Failed to download masterminds/html5 from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing masterminds/html5 (2.10.0) into cache
+    Failed to download symfony/html-sanitizer from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/html-sanitizer (v7.4.0) into cache
+    Failed to download spatie/invade from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing spatie/invade (2.1.0) into cache
+    Failed to download spatie/color from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing spatie/color (1.8.0) into cache
+    Failed to download ryangjchandler/blade-capture-directive from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing ryangjchandler/blade-capture-directive (v1.1.0) into cache
+    Failed to download livewire/livewire from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing livewire/livewire (v3.7.11) into cache
+    Failed to download kirschbaum-development/eloquent-power-joins from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing kirschbaum-development/eloquent-power-joins (4.2.11) into cache
+    Failed to download filament/support from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing filament/support (v3.3.49) into cache
+    Failed to download filament/widgets from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing filament/widgets (v3.3.49) into cache
+    Failed to download openspout/openspout from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing openspout/openspout (v4.32.0) into cache
+    Failed to download league/csv from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing league/csv (9.28.0) into cache
+    Failed to download filament/actions from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing filament/actions (v3.3.49) into cache
+    Failed to download filament/notifications from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing filament/notifications (v3.3.49) into cache
+    Failed to download filament/infolists from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing filament/infolists (v3.3.49) into cache
+    Failed to download filament/forms from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing filament/forms (v3.3.49) into cache
+    Failed to download filament/tables from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing filament/tables (v3.3.49) into cache
+    Failed to download danharrin/livewire-rate-limiting from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing danharrin/livewire-rate-limiting (v2.1.0) into cache
+    Failed to download filament/filament from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing filament/filament (v3.3.49) into cache
+    Failed to download inertiajs/inertia-laravel from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing inertiajs/inertia-laravel (v2.0.22) into cache
+    Failed to download laravel/sentinel from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing laravel/sentinel (v1.0.1) into cache
+    Failed to download laravel/horizon from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing laravel/horizon (v5.45.0) into cache
+    Failed to download laravel/pail from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing laravel/pail (v1.2.4) into cache
+    Failed to download laravel/pint from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing laravel/pint (v1.26.0) into cache
+    Failed to download react/event-loop from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing react/event-loop (v1.6.0) into cache
+    Failed to download evenement/evenement from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing evenement/evenement (v3.0.2) into cache
+    Failed to download react/stream from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing react/stream (v1.4.0) into cache
+    Failed to download react/promise from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing react/promise (v3.3.0) into cache
+    Failed to download react/cache from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing react/cache (v1.2.0) into cache
+    Failed to download react/dns from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing react/dns (v1.14.0) into cache
+    Failed to download react/socket from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing react/socket (v1.17.0) into cache
+    Failed to download react/promise-timer from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing react/promise-timer (v1.11.0) into cache
+    Failed to download ratchet/rfc6455 from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing ratchet/rfc6455 (v0.4.0) into cache
+    Failed to download paragonie/sodium_compat from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing paragonie/sodium_compat (v2.5.0) into cache
+    Failed to download pusher/pusher-php-server from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing pusher/pusher-php-server (7.2.7) into cache
+    Failed to download clue/redis-react from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing clue/redis-react (v2.8.0) into cache
+    Failed to download laravel/reverb from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing laravel/reverb (v1.8.0) into cache
+    Failed to download symfony/yaml from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing symfony/yaml (v7.4.0) into cache
+    Failed to download laravel/sail from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing laravel/sail (v1.48.1) into cache
+    Failed to download nikic/php-parser from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing nikic/php-parser (v5.6.2) into cache
+    Failed to download psy/psysh from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing psy/psysh (v0.12.15) into cache
+    Failed to download laravel/tinker from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing laravel/tinker (v2.10.2) into cache
+    Failed to download hamcrest/hamcrest-php from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing hamcrest/hamcrest-php (v2.1.1) into cache
+    Failed to download mockery/mockery from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing mockery/mockery (1.6.12) into cache
+    Failed to download filp/whoops from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing filp/whoops (2.18.4) into cache
+    Failed to download nunomaduro/collision from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing nunomaduro/collision (v8.8.3) into cache
+    Failed to download staabm/side-effects-detector from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing staabm/side-effects-detector (1.0.5) into cache
+    Failed to download sebastian/version from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/version (5.0.2) into cache
+    Failed to download sebastian/type from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/type (5.1.3) into cache
+    Failed to download sebastian/recursion-context from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/recursion-context (6.0.3) into cache
+    Failed to download sebastian/object-reflector from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/object-reflector (4.0.1) into cache
+    Failed to download sebastian/object-enumerator from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/object-enumerator (6.0.1) into cache
+    Failed to download sebastian/global-state from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/global-state (7.0.2) into cache
+    Failed to download sebastian/exporter from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/exporter (6.3.2) into cache
+    Failed to download sebastian/environment from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/environment (7.2.1) into cache
+    Failed to download sebastian/diff from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/diff (6.0.2) into cache
+    Failed to download sebastian/comparator from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/comparator (6.3.2) into cache
+    Failed to download sebastian/code-unit from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/code-unit (3.0.3) into cache
+    Failed to download sebastian/cli-parser from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/cli-parser (3.0.2) into cache
+    Failed to download phpunit/php-timer from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing phpunit/php-timer (7.0.1) into cache
+    Failed to download phpunit/php-text-template from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing phpunit/php-text-template (4.0.1) into cache
+    Failed to download phpunit/php-invoker from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing phpunit/php-invoker (5.0.1) into cache
+    Failed to download phpunit/php-file-iterator from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing phpunit/php-file-iterator (5.1.0) into cache
+    Failed to download theseer/tokenizer from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing theseer/tokenizer (1.3.1) into cache
+    Failed to download sebastian/lines-of-code from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/lines-of-code (3.0.1) into cache
+    Failed to download sebastian/complexity from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/complexity (4.0.1) into cache
+    Failed to download sebastian/code-unit-reverse-lookup from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing sebastian/code-unit-reverse-lookup (4.0.1) into cache
+    Failed to download phpunit/php-code-coverage from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing phpunit/php-code-coverage (11.0.11) into cache
+    Failed to download phar-io/version from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing phar-io/version (3.2.1) into cache
+    Failed to download phar-io/manifest from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing phar-io/manifest (2.0.4) into cache
+    Failed to download myclabs/deep-copy from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing myclabs/deep-copy (1.13.4) into cache
+    Failed to download phpunit/phpunit from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing phpunit/phpunit (11.5.45) into cache
+    Failed to download tightenco/ziggy from dist: The zip extension and unzip/7z commands are both missing, skipping.
+The php.ini used by your command-line PHP is: C:\php\php.ini
+    Now trying to download from source
+  - Syncing tightenco/ziggy (v2.6.2) into cache
+    0 [>---------------------------]    0 [->--------------------------]
+  - Installing voku/portable-ascii (2.0.3): Cloning b1d923f880 from cache
+    Install of voku/portable-ascii failed
+  - Installing symfony/polyfill-php80 (v1.33.0): Cloning 0cc9dd0f17 from cache
+    Install of symfony/polyfill-php80 failed
+  - Installing symfony/polyfill-mbstring (v1.33.0): Cloning 6d857f4d76 from cache
+    Install of symfony/polyfill-mbstring failed
+  - Installing symfony/polyfill-ctype (v1.33.0): Cloning a3cc8b044a from cache
+    Install of symfony/polyfill-ctype failed
+  - Installing phpoption/phpoption (1.9.5): Cloning 75365b9198 from cache
+    Install of phpoption/phpoption failed
+  - Installing graham-campbell/result-type (v1.1.4): Cloning e01f4a8214 from cache
+    Install of graham-campbell/result-type failed
+  - Installing vlucas/phpdotenv (v5.6.3): Cloning 955e7815d6 from cache
+    Install of vlucas/phpdotenv failed
+  - Installing symfony/css-selector (v7.0.0): Cloning bb51d46e53 from cache
+    Install of symfony/css-selector failed
+  - Installing tijsverkoyen/css-to-inline-styles (v2.4.0): Cloning f0292ccf0e from cache
+    Install of tijsverkoyen/css-to-inline-styles failed
+  - Installing symfony/deprecation-contracts (v3.6.0): Cloning 63afe740e9 from cache
+    Install of symfony/deprecation-contracts failed
+  - Installing symfony/var-dumper (v7.4.6): Cloning 045321c440 from cache
+    Install of symfony/var-dumper failed
+  - Installing symfony/polyfill-uuid (v1.33.0): Cloning 21533be36c from cache
+    Install of symfony/polyfill-uuid failed
+  - Installing symfony/uid (v7.4.4): Cloning 7719ce8aba from cache
+    Install of symfony/uid failed
+  - Installing symfony/routing (v7.4.6): Cloning 238d749c56 from cache
+    Install of symfony/routing failed
+  - Installing symfony/process (v7.4.5): Cloning 608476f460 from cache
+    Install of symfony/process failed
+  - Installing symfony/polyfill-php83 (v1.33.0): Cloning 17f6f9a6b1 from cache
+    Install of symfony/polyfill-php83 failed
+  - Installing symfony/polyfill-intl-normalizer (v1.33.0): Cloning 3833d7255c from cache
+    Install of symfony/polyfill-intl-normalizer failed
+  - Installing symfony/polyfill-intl-idn (v1.33.0): Cloning 9614ac4d80 from cache
+    Install of symfony/polyfill-intl-idn failed
+  - Installing symfony/mime (v7.4.6): Cloning 9fc881d95f from cache
+    Install of symfony/mime failed
+  - Installing psr/container (2.0.2): Cloning c71ecc56df from cache
+    Install of psr/container failed
+  - Installing symfony/service-contracts (v3.6.1): Cloning 45112560a3 from cache
+    Install of symfony/service-contracts failed
+  - Installing psr/event-dispatcher (1.0.0): Cloning dbefd12671 from cache
+    Install of psr/event-dispatcher failed
+  - Installing symfony/event-dispatcher-contracts (v3.6.0): Cloning 59eb412e93 from cache
+    Install of symfony/event-dispatcher-contracts failed
+  - Installing symfony/event-dispatcher (v7.3.0): Cloning 497f73ac99 from cache
+    Install of symfony/event-dispatcher failed
+  - Installing psr/log (3.0.2): Cloning f16e1d5863 from cache
+    Install of psr/log failed
+  - Installing doctrine/lexer (3.0.1): Cloning 31ad66abc0 from cache
+    Install of doctrine/lexer failed
+  - Installing egulias/email-validator (4.0.4): Cloning d42c8731f0 from cache
+    Install of egulias/email-validator failed
+  - Installing symfony/mailer (v7.4.6): Cloning b02726f39a from cache
+    Install of symfony/mailer failed
+  - Installing symfony/http-foundation (v7.4.6): Cloning fd97d5e926 from cache
+    Install of symfony/http-foundation failed
+  - Installing symfony/polyfill-php85 (v1.33.0): Cloning d4e5fcd4ab from cache
+    Install of symfony/polyfill-php85 failed
+  - Installing symfony/error-handler (v7.4.4): Cloning 8da531f364 from cache
+    Install of symfony/error-handler failed
+  - Installing symfony/http-kernel (v7.4.6): Cloning 002ac0cf4c from cache
+    Install of symfony/http-kernel failed
+  - Installing symfony/finder (v7.4.6): Cloning 8655bf1076 from cache
+    Install of symfony/finder failed
+  - Installing symfony/polyfill-intl-grapheme (v1.33.0): Cloning 380872130d from cache
+    Install of symfony/polyfill-intl-grapheme failed
+  - Installing symfony/string (v7.2.0): Cloning 446e0d146f from cache
+    Install of symfony/string failed
+  - Installing symfony/console (v7.4.6): Cloning 6d643a93b4 from cache
+    Install of symfony/console failed
+  - Installing ramsey/collection (2.1.1): Cloning 344572933a from cache
+    Install of ramsey/collection failed
+  - Installing brick/math (0.14.8): Cloning 63422359a4 from cache
+    Install of brick/math failed
+  - Installing ramsey/uuid (4.9.2): Cloning 8429c78ca3 from cache
+    Install of ramsey/uuid failed
+  - Installing psr/simple-cache (3.0.0): Cloning 764e0b3939 from cache
+    Install of psr/simple-cache failed
+  - Installing nunomaduro/termwind (v2.4.0): Cloning 712a31b768 from cache
+    Install of nunomaduro/termwind failed
+  - Installing symfony/translation-contracts (v3.6.1): Cloning 65a8bc8208 from cache
+    Install of symfony/translation-contracts failed
+  - Installing symfony/translation (v7.0.0): Cloning ab5a14723f from cache
+    Install of symfony/translation failed
+  - Installing psr/clock (1.0.0): Cloning e41a24703d from cache
+    Install of psr/clock failed
+  - Installing symfony/clock (v7.0.0): Cloning c696b075be from cache
+    Install of symfony/clock failed
+  - Installing carbonphp/carbon-doctrine-types (3.2.0): Cloning 18ba5ddfec from cache
+    Install of carbonphp/carbon-doctrine-types failed
+  - Installing nesbot/carbon (3.8.4): Cloning 129700ed44 from cache
+    Install of nesbot/carbon failed
+  - Installing monolog/monolog (3.10.0): Cloning b321dd6749 from cache
+    Install of monolog/monolog failed
+  - Installing psr/http-message (2.0): Cloning 402d35bcb9 from cache
+    Install of psr/http-message failed
+  - Installing psr/http-factory (1.1.0): Cloning 2b4765fddf from cache
+    Install of psr/http-factory failed
+  - Installing league/uri-interfaces (7.8.0): Cloning c5c5cd0561 from cache
+    Install of league/uri-interfaces failed
+  - Installing league/uri (7.8.0): Cloning 4436c6ec8d from cache
+    Install of league/uri failed
+  - Installing league/mime-type-detection (1.16.0): Cloning 2d6702ff21 from cache
+    Install of league/mime-type-detection failed
+  - Installing league/flysystem-local (3.31.0): Cloning 2f669db18a from cache
+    Install of league/flysystem-local failed
+  - Installing league/flysystem (3.32.0): Cloning 254b1595b1 from cache
+    Install of league/flysystem failed
+  - Installing nette/utils (v4.1.3): Cloning bb3ea637e3 from cache
+    Install of nette/utils failed
+  - Installing nette/schema (v1.3.5): Cloning f0ab1a3cda from cache
+    Install of nette/schema failed
+  - Installing dflydev/dot-access-data (v3.0.3): Cloning a23a2bf4f3 from cache
+    Install of dflydev/dot-access-data failed
+  - Installing league/config (v1.2.0): Cloning 754b3604fb from cache
+    Install of league/config failed
+  - Installing league/commonmark (2.8.0): Cloning 4efa10c1e5 from cache
+    Install of league/commonmark failed
+  - Installing laravel/serializable-closure (v2.0.10): Cloning 870fc81d2f from cache
+    Install of laravel/serializable-closure failed
+  - Installing laravel/prompts (v0.3.13): Cloning ed8c466571 from cache
+    Install of laravel/prompts failed
+  - Installing guzzlehttp/uri-template (v1.0.5): Cloning 4f4bbd4e71 from cache
+    Install of guzzlehttp/uri-template failed
+  - Installing psr/http-client (1.0.3): Cloning bb5906edc1 from cache
+    Install of psr/http-client failed
+  - Installing ralouphie/getallheaders (3.0.3): Cloning 120b605dfe from cache
+    Install of ralouphie/getallheaders failed
+  - Installing guzzlehttp/psr7 (2.8.0): Cloning 21dc724a05 from cache
+    Install of guzzlehttp/psr7 failed
+  - Installing guzzlehttp/promises (2.3.0): Cloning 481557b130 from cache
+    Install of guzzlehttp/promises failed
+  - Installing guzzlehttp/guzzle (7.10.0): Cloning b51ac707cf from cache
+    Install of guzzlehttp/guzzle failed
+  - Installing fruitcake/php-cors (v1.4.0): Cloning 38aaa6c3fd from cache
+    Install of fruitcake/php-cors failed
+  - Installing dragonmantank/cron-expression (v3.6.0): Cloning d61a8a9604 from cache
+    Install of dragonmantank/cron-expression failed
+  - Installing doctrine/inflector (2.1.0): Cloning 6d6c96277e from cache
+    Install of doctrine/inflector failed
+  - Installing laravel/framework (v11.48.0): Cloning 5b23ab2908 from cache
+    Install of laravel/framework failed
+  - Installing anourvalar/eloquent-serialize (1.3.5): Cloning 1a7dead8d5 from cache
+    Install of anourvalar/eloquent-serialize failed
+  - Installing blade-ui-kit/blade-icons (1.9.0): Cloning caa92fde67 from cache
+    Install of blade-ui-kit/blade-icons failed
+  - Installing blade-ui-kit/blade-heroicons (2.6.0): Cloning 4553b2a1f6 from cache
+    Install of blade-ui-kit/blade-heroicons failed
+  - Installing clue/redis-protocol (v0.3.2): Cloning 6f565332f5 from cache
+    Install of clue/redis-protocol failed
+  - Installing danharrin/date-format-converter (v0.3.1): Cloning 7c31171bc9 from cache
+    Install of danharrin/date-format-converter failed
+  - Installing psr/cache (3.0.0): Cloning aa5030cfa5 from cache
+    Install of psr/cache failed
+  - Installing doctrine/deprecations (1.1.6): Cloning d4fe3e6fd9 from cache
+    Install of doctrine/deprecations failed
+  - Installing doctrine/dbal (4.4.2): Cloning 476f7f0fa6 from cache
+    Install of doctrine/dbal failed
+  - Installing fakerphp/faker (v1.24.1): Cloning e0ee18eb1e from cache
+    Install of fakerphp/faker failed
+  - Installing spatie/laravel-package-tools (1.93.0): Cloning 0d097bce95 from cache
+    Install of spatie/laravel-package-tools failed
+  - Installing masterminds/html5 (2.10.0): Cloning fcf91eb643 from cache
+    Install of masterminds/html5 failed
+  - Installing symfony/html-sanitizer (v7.4.0): Cloning 5b0bbcc360 from cache
+    Install of symfony/html-sanitizer failed
+  - Installing spatie/invade (2.1.0): Cloning b920f6411d from cache
+    Install of spatie/invade failed
+  - Installing spatie/color (1.8.0): Cloning 142af7fec0 from cache
+    Install of spatie/color failed
+  - Installing ryangjchandler/blade-capture-directive (v1.1.0): Cloning bbb1513dfd from cache
+    Install of ryangjchandler/blade-capture-directive failed
+  - Installing livewire/livewire (v3.7.11): Cloning addd6e8e92 from cache
+    Install of livewire/livewire failed
+  - Installing kirschbaum-development/eloquent-power-joins (4.2.11): Cloning 0e3e337299 from cache
+    Install of kirschbaum-development/eloquent-power-joins failed
+  - Installing filament/support (v3.3.49): Cloning 493bd79d4f from cache
+    Install of filament/support failed
+  - Installing filament/widgets (v3.3.49): Cloning f58ff26e81 from cache
+    Install of filament/widgets failed
+  - Installing openspout/openspout (v4.32.0): Cloning 41f045c1f6 from cache
+    Install of openspout/openspout failed
+  - Installing league/csv (9.28.0): Cloning 6582ace29a from cache
+    Install of league/csv failed
+  - Installing filament/actions (v3.3.49): Cloning 3cb3e1f909 from cache
+    Install of filament/actions failed
+  - Installing filament/notifications (v3.3.49): Cloning 3a6ef54b6a from cache
+    Install of filament/notifications failed
+  - Installing filament/infolists (v3.3.49): Cloning 9cef7bf9f4 from cache
+    Install of filament/infolists failed
+  - Installing filament/forms (v3.3.49): Cloning c64bf142f8 from cache
+    Install of filament/forms failed
+  - Installing filament/tables (v3.3.49): Cloning fb0ab98695 from cache
+    Install of filament/tables failed
+  - Installing danharrin/livewire-rate-limiting (v2.1.0): Cloning 14dde653a9 from cache
+    Install of danharrin/livewire-rate-limiting failed
+  - Installing filament/filament (v3.3.49): Cloning 6098e568b4 from cache
+    Install of filament/filament failed
+  - Installing inertiajs/inertia-laravel (v2.0.22): Cloning 4d5849328d from cache
+    Install of inertiajs/inertia-laravel failed
+  - Installing laravel/sentinel (v1.0.1): Cloning 7a98db53e0 from cache
+    Install of laravel/sentinel failed
+  - Installing laravel/horizon (v5.45.0): Cloning 7126ddf27f from cache
+    Install of laravel/horizon failed
+  - Installing laravel/pail (v1.2.4): Cloning 49f92285ff from cache
+    Install of laravel/pail failed
+  - Installing laravel/pint (v1.26.0): Cloning 69dcca060e from cache
+    Install of laravel/pint failed
+  - Installing react/event-loop (v1.6.0): Cloning ba276bda60 from cache
+    Install of react/event-loop failed
+  - Installing evenement/evenement (v3.0.2): Cloning 0a16b0d71a from cache
+    Install of evenement/evenement failed
+  - Installing react/stream (v1.4.0): Cloning 1e5b0acb8f from cache
+    Install of react/stream failed
+  - Installing react/promise (v3.3.0): Cloning 23444f53a8 from cache
+    Install of react/promise failed
+  - Installing react/cache (v1.2.0): Cloning d47c472b64 from cache
+    Install of react/cache failed
+  - Installing react/dns (v1.14.0): Cloning 7562c05391 from cache
+    Install of react/dns failed
+  - Installing react/socket (v1.17.0): Cloning ef5b17b81f from cache
+    Install of react/socket failed
+  - Installing react/promise-timer (v1.11.0): Cloning 4f70306ed6 from cache
+    Install of react/promise-timer failed
+  - Installing ratchet/rfc6455 (v0.4.0): Cloning 859d95f85d from cache
+    Install of ratchet/rfc6455 failed
+  - Installing paragonie/sodium_compat (v2.5.0): Cloning 4714da6efd from cache
+    Install of paragonie/sodium_compat failed
+  - Installing pusher/pusher-php-server (7.2.7): Cloning 148b0b5100 from cache
+    Install of pusher/pusher-php-server failed
+  - Installing clue/redis-react (v2.8.0): Cloning 84569198df from cache
+    Install of clue/redis-react failed
+  - Installing laravel/reverb (v1.8.0): Cloning 53753b7203 from cache
+    Install of laravel/reverb failed
+  - Installing symfony/yaml (v7.4.0): Cloning 6c84a4b55a from cache
+    Install of symfony/yaml failed
+  - Installing laravel/sail (v1.48.1): Cloning ef122b223f from cache
+    Install of laravel/sail failed
+  - Installing nikic/php-parser (v5.6.2): Cloning 3a454ca033 from cache
+    Install of nikic/php-parser failed
+  - Installing psy/psysh (v0.12.15): Cloning 38953bc714 from cache
+    Install of psy/psysh failed
+  - Installing laravel/tinker (v2.10.2): Cloning 3bcb5f62d6 from cache
+    Install of laravel/tinker failed
+  - Installing hamcrest/hamcrest-php (v2.1.1): Cloning f8b1c0173b from cache
+    Install of hamcrest/hamcrest-php failed
+  - Installing mockery/mockery (1.6.12): Cloning 1f4efdd7d3 from cache
+    Install of mockery/mockery failed
+  - Installing filp/whoops (2.18.4): Cloning d2102955e4 from cache
+    Install of filp/whoops failed
+  - Installing nunomaduro/collision (v8.8.3): Cloning 1dc9e88d10 from cache
+    Install of nunomaduro/collision failed
+  - Installing staabm/side-effects-detector (1.0.5): Cloning d8334211a1 from cache
+    Install of staabm/side-effects-detector failed
+  - Installing sebastian/version (5.0.2): Cloning c687e3387b from cache
+    Install of sebastian/version failed
+  - Installing sebastian/type (5.1.3): Cloning f77d2d4e78 from cache
+    Install of sebastian/type failed
+  - Installing sebastian/recursion-context (6.0.3): Cloning f6458abbf3 from cache
+    Install of sebastian/recursion-context failed
+  - Installing sebastian/object-reflector (4.0.1): Cloning 6e1a43b411 from cache
+    Install of sebastian/object-reflector failed
+  - Installing sebastian/object-enumerator (6.0.1): Cloning f5b498e631 from cache
+    Install of sebastian/object-enumerator failed
+  - Installing sebastian/global-state (7.0.2): Cloning 3be331570a from cache
+    Install of sebastian/global-state failed
+  - Installing sebastian/exporter (6.3.2): Cloning 70a298763b from cache
+    Install of sebastian/exporter failed
+  - Installing sebastian/environment (7.2.1): Cloning a5c7503869 from cache
+    Install of sebastian/environment failed
+  - Installing sebastian/diff (6.0.2): Cloning b4ccd85712 from cache
+    Install of sebastian/diff failed
+  - Installing sebastian/comparator (6.3.2): Cloning 85c7755668 from cache
+    Install of sebastian/comparator failed
+  - Installing sebastian/code-unit (3.0.3): Cloning 54391c61e4 from cache
+    Install of sebastian/code-unit failed
+  - Installing sebastian/cli-parser (3.0.2): Cloning 15c5dd40dc from cache
+    Install of sebastian/cli-parser failed
+  - Installing phpunit/php-timer (7.0.1): Cloning 3b415def83 from cache
+    Install of phpunit/php-timer failed
+  - Installing phpunit/php-text-template (4.0.1): Cloning 3e0404dc6b from cache
+    Install of phpunit/php-text-template failed
+  - Installing phpunit/php-invoker (5.0.1): Cloning c1ca381473 from cache
+    Install of phpunit/php-invoker failed
+  - Installing phpunit/php-file-iterator (5.1.0): Cloning 118cfaaa8b from cache
+    Install of phpunit/php-file-iterator failed
+  - Installing theseer/tokenizer (1.3.1): Cloning b7489ce515 from cache
+    Install of theseer/tokenizer failed
+  - Installing sebastian/lines-of-code (3.0.1): Cloning d36ad0d782 from cache
+    Install of sebastian/lines-of-code failed
+  - Installing sebastian/complexity (4.0.1): Cloning ee41d384ab from cache
+    Install of sebastian/complexity failed
+  - Installing sebastian/code-unit-reverse-lookup (4.0.1): Cloning 183a9b2632 from cache
+    Install of sebastian/code-unit-reverse-lookup failed
+  - Installing phpunit/php-code-coverage (11.0.11): Cloning 4f7722aa9a from cache
+    Install of phpunit/php-code-coverage failed
+  - Installing phar-io/version (3.2.1): Cloning 4f7fd7836c from cache
+    Install of phar-io/version failed
+  - Installing phar-io/manifest (2.0.4): Cloning 54750ef60c from cache
+    Install of phar-io/manifest failed
+  - Installing myclabs/deep-copy (1.13.4): Cloning 07d290f0c4 from cache
+    Install of myclabs/deep-copy failed
+  - Installing phpunit/phpunit (11.5.45): Cloning faf5fff4fb from cache
+    Install of phpunit/phpunit failed
+  - Installing tightenco/ziggy (v2.6.2): Cloning 8a0b645921 from cache
+    Install of tightenco/ziggy failed
+    0 [>---------------------------]    0 [->--------------------------]
+In Git.php line 652:
+                                                                                                                       
+  Failed to clone https://github.com/voku/portable-ascii.git via https, ssh protocols, aborting.                       
+                                                                                                                       
+  - https://github.com/voku/portable-ascii.git                                                                         
+    Cloning into 'D:\SISTEMAS\HUB360PRO\hub360pro-app.prisma.com.br\vendor\voku\portable-ascii'...                     
+    fatal: 'C:/Program Files/Git/home2/kelvi593/app.prismaads.com.br/cache/vcs/https---github.com-voku-portable-ascii  
+  .git/' does not appear to be a git repository                                                                        
+    fatal: Could not read from remote repository.                                                                      
+                                                                                                                       
+    Please make sure you have the correct access rights                                                                
+    and the repository exists.                                                                                         
+                                                                                                                       
+  - git@github.com:voku/portable-ascii.git                                                                             
+    Cloning into 'D:\SISTEMAS\HUB360PRO\hub360pro-app.prisma.com.br\vendor\voku\portable-ascii'...                     
+    fatal: 'C:/Program Files/Git/home2/kelvi593/app.prismaads.com.br/cache/vcs/https---github.com-voku-portable-ascii  
+  .git/' does not appear to be a git repository                                                                        
+    fatal: Could not read from remote repository.                                                                      
+                                                                                                                       
+    Please make sure you have the correct access rights                                                                
+    and the repository exists.                                                                                         
+                                                                                                                       
+
+update [--with WITH] [--prefer-source] [--prefer-dist] [--prefer-install PREFER-INSTALL] [--dry-run] [--dev] [--no-dev] [--lock] [--no-install] [--no-audit] [--audit-format AUDIT-FORMAT] [--no-security-blocking] [--no-autoloader] [--no-suggest] [--no-progress] [-w|--with-dependencies] [-W|--with-all-dependencies] [-v|vv|vvv|--verbose] [-o|--optimize-autoloader] [-a|--classmap-authoritative] [--apcu-autoloader] [--apcu-autoloader-prefix APCU-AUTOLOADER-PREFIX] [--ignore-platform-req IGNORE-PLATFORM-REQ] [--ignore-platform-reqs] [--prefer-stable] [--prefer-lowest] [-m|--minimal-changes] [--patch-only] [-i|--interactive] [--root-reqs] [--bump-after-update [BUMP-AFTER-UPDATE]] [--] [<packages>...]
+

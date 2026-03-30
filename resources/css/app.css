@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --mac-bg: #F5F5F7;
+        --mac-sidebar: rgba(255, 255, 255, 0.7);
+        --mac-glass: rgba(255, 255, 255, 0.4);
+        --mac-border: rgba(0, 0, 0, 0.08);
+        --mac-text-primary: #1D1D1F;
+        --mac-text-secondary: #86868B;
+        --mac-accent: #0071E3;
+    }
+
+    body {
+        @apply bg-[#F5F5F7] text-[#1D1D1F] antialiased;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+}
+
+@layer components {
+    .glass-sidebar {
+        @apply bg-white/70 backdrop-blur-3xl border-r border-black/[0.06];
+    }
+    
+    .glass-card {
+        @apply bg-white/80 backdrop-blur-2xl border border-black/[0.04] shadow-[0_8px_30px_rgb(0,0,0,0.04)];
+    }
+
+    .mac-shadow {
+        @apply shadow-[0_20px_50px_rgba(0,0,0,0.05)];
+    }
+
+    .mac-button {
+        @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 active:scale-95;
+    }
+
+    .mac-button-primary {
+        @apply mac-button bg-[#0071E3] text-white hover:bg-[#0077ED] shadow-[0_4px_12px_rgba(0,113,227,0.3)];
+    }
+
+    .mac-button-secondary {
+        @apply mac-button bg-black/[0.05] text-[#1D1D1F] hover:bg-black/[0.08];
+    }
+}
+
+/* Custom Scrollbar macOS Style */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.2);
+}

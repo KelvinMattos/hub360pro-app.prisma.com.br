@@ -1,0 +1,9 @@
+@echo off
+echo Adicionando arquivos...
+git add database/migrations/2026_03_20_100000_ensure_integrations_table_is_complete.php
+git add app/Services/Adapters/MercadoLivreAdapter.php
+echo Commitando...
+git commit -m "fix: alinha MercadoLivreAdapter com interface e adiciona migracao para completar tabela integrations"
+echo Enviando para o GitHub...
+git push origin main
+echo Pronto!
