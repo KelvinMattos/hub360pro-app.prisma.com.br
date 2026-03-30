@@ -28,6 +28,14 @@ class MercadoLivreApiService
     }
 
     /**
+     * Retorna a credencial atual em cache no serviço
+     */
+    public function getCredential(): ?Integration
+    {
+        return $this->credential;
+    }
+
+    /**
      * Executa uma requisição GET.
      */
     public function get(string $endpoint, array $query = [])
