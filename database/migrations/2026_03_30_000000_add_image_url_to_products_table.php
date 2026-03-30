@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('products', function (Blueprint $table) {
             if (!Schema::hasColumn('products', 'image_url')) {
-                $table->string('image_url', 1000)->nullable()->after('brand');
+                $table->string('image_url', 1000)->nullable()->after('title');
             }
         });
     }
