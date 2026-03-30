@@ -26,14 +26,20 @@ class SettingsController extends Controller
     {
         $company = Auth::user()->company;
         
-        // Ordenamos para que registros com app_id fiquem "por cima" no keyBy de plataforma
+        // Configurações de chaves por plataforma
         $integrations = $company->integrations()
             ->orderByRaw('app_id IS NULL ASC')
             ->get()
             ->keyBy('platform');
 
+        // Contas individuais (credentials) conectadas
+        $credentials = Integration::where('company_id', $company->id)
+            ->whereNotNull('access_token')
+            ->get();
+
         return Inertia::render('Settings/Integrations', [
             'integrations' => $integrations,
+            'credentials' => $credentials,
             'company' => $company
         ]);
     }
