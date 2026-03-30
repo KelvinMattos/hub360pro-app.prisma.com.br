@@ -57,7 +57,7 @@ class SyncOrdersCommand extends Command
         }
     }
 
-    private function saveOrders($integration, $orders)
+    public function saveOrders($integration, $orders)
     {
         foreach ($orders as $orderData) {
             // CRM LOGIC

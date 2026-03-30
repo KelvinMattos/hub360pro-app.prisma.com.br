@@ -77,57 +77,54 @@ class ProductController extends Controller
             $adapter = new \App\Services\Adapters\MercadoLivreAdapter();
 
             foreach ($integrations as $integration) {
-                // 1. Busca IDs ativos
-                $allIds = $adapter->fetchAllActiveItemIds($integration);
-                if (empty($allIds)) continue;
+                // 1. Busca todos os produtos ativos e suas propriedades
+                $productsData = $adapter->fetchProducts($integration);
+                if (empty($productsData)) continue;
 
-                // 2. Processa em lotes
-                foreach (array_chunk($allIds, 20) as $chunkIds) {
-                    $productsData = $adapter->getItemsDetails($integration, $chunkIds);
+                foreach ($productsData as $data) {
+                    try {
+                        $product = Product::where('company_id', $company->id)
+                            ->where(function($q) use ($data) {
+                                $q->where('external_id', $data['external_id']);
+                                if (!empty($data['sku'])) {
+                                    $q->orWhere('sku', $data['sku']);
+                                }
+                            })->first();
 
-                    foreach ($productsData as $data) {
-                        try {
-                            $product = Product::where('company_id', $company->id)
-                                ->where(function($q) use ($data) {
-                                    $q->where('external_id', $data['external_id'])
-                                      ->orWhere('sku', $data['sku']);
-                                })->first();
+                        $costPrice = ($product && $product->cost_price > 0) 
+                            ? $product->cost_price 
+                            : ($data['price'] * 0.5); 
 
-                            $costPrice = ($product && $product->cost_price > 0) 
-                                ? $product->cost_price 
-                                : ($data['price'] * 0.5); 
-
-                            $prod = Product::updateOrCreate(
-                                [
-                                    'company_id' => $company->id,
-                                    'external_id' => $data['external_id']
-                                ],
-                                [
-                                    'sku' => $data['sku'],
-                                    'title' => $data['title'],
-                                    'image_url' => $data['image_url'],
-                                    'stock_quantity' => $data['stock'],
-                                    'sale_price' => $data['price'],
-                                    'cost_price' => $costPrice,
-                                    'category_id' => $data['category_id'],
-                                    'listing_type_id' => $data['listing_type_id'],
-                                    'permalink' => substr($data['permalink'], 0, 65000),
-                                    'status' => $data['status'],
-                                    'json_data' => $data['json_data'], 
-                                    'updated_at' => now()
-                                ]
-                            );
-                            
-                            $prod->pricing()->firstOrCreate(['product_id' => $prod->id], [
+                        $prod = Product::updateOrCreate(
+                            [
+                                'company_id' => $company->id,
+                                'external_id' => $data['external_id']
+                            ],
+                            [
+                                'sku' => $data['sku'],
+                                'title' => $data['title'],
+                                'image_url' => $data['thumbnail'] ?? null,
+                                'stock_quantity' => $data['stock'],
+                                'sale_price' => $data['price'],
                                 'cost_price' => $costPrice,
-                                'tax_percentage' => $company->tax_rate ?? 6.00
-                            ]);
+                                'category_id' => $data['ml_category_id'] ?? null,
+                                'listing_type_id' => $data['listing_type_id'] ?? null,
+                                'permalink' => isset($data['permalink']) ? substr($data['permalink'], 0, 65000) : null,
+                                'status' => $data['status'],
+                                'json_data' => $data, 
+                                'updated_at' => now()
+                            ]
+                        );
+                        
+                        $prod->pricing()->firstOrCreate(['product_id' => $prod->id], [
+                            'cost_price' => $costPrice,
+                            'tax_percentage' => $company->tax_rate ?? 6.00
+                        ]);
 
-                            $totalSynced++;
-                        } catch (\Exception $e) {
-                            $errorsCount++;
-                            \Illuminate\Support\Facades\Log::error("Erro no produto {$data['external_id']}: " . $e->getMessage());
-                        }
+                        $totalSynced++;
+                    } catch (\Exception $e) {
+                        $errorsCount++;
+                        \Illuminate\Support\Facades\Log::error("Erro no produto {$data['external_id']}: " . $e->getMessage());
                     }
                 }
             }
