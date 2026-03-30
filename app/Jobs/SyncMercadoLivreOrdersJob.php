@@ -47,7 +47,7 @@ class SyncMercadoLivreOrdersJob implements ShouldQueue
     {
         // Precisamos instanciar o service manualmente se o companyId for passado no construct
         // Ou podemos injetar uma Factory. Para este cenário, vamos usar o ID.
-        $service = new MercadoLivreApiService($this->companyId);
+        $service = (new MercadoLivreApiService())->forCompany($this->companyId);
 
         Log::info("Iniciando Sincronização de Pedidos ML para Company: {$this->companyId}");
 
@@ -116,29 +116,47 @@ class SyncMercadoLivreOrdersJob implements ShouldQueue
             }
         }
 
-        // 4. Persistência de Dados 100% Funcional
-        Order::updateOrCreate(
+        // Recuperar Integration associada a essa venda, se possível (opcional, pegando a primeira ativa)
+        $integration = \App\Models\Integration::where('company_id', $this->companyId)
+            ->where('platform', 'mercadolibre')->first();
+
+        // 4. Persistência de Dados
+        $order = Order::updateOrCreate(
             [
                 'company_id' => $this->companyId,
-                'ml_order_id' => (string) $orderData['id']
+                'external_id' => (string) $orderData['id']
             ],
             [
+                'integration_id' => $integration ? $integration->id : null,
                 'status' => $orderData['status'],
                 'buyer_nickname' => $orderData['buyer']['nickname'] ?? null,
-                'buyer_id' => (string) ($orderData['buyer']['id'] ?? ''),
+                'customer_name' => $orderData['buyer']['nickname'] ?? 'Cliente Desconhecido',
+                'customer_doc' => $orderData['buyer']['billing_info']['doc_number'] ?? null,
+                'billing_doc_type' => $orderData['buyer']['billing_info']['doc_type'] ?? null,
+                'billing_doc_number' => $orderData['buyer']['billing_info']['doc_number'] ?? null,
                 'total_amount' => $orderData['total_amount'],
                 'total_paid_amount' => $totalPaid,
-                'ml_fee_amount' => $mlFeeAmount,
-                'shipping_cost' => $shippingCost,
-                'currency_id' => $orderData['currency_id'] ?? 'BRL',
-                'payment_status' => $orderData['status'], // Simplificado ou extraído do array
-                'shipping_status' => $orderData['shipping']['status'] ?? 'pending',
-                'items' => $orderData['order_items'] ?? [],
-                'billing_info' => $orderData['context']['billing_info'] ?? null,
+                'cost_tax_platform' => $mlFeeAmount,
+                'cost_shipping_seller' => $shippingCost,
+                'payment_status' => $orderData['payments'][0]['status'] ?? $orderData['status'], 
                 'json_payments' => $orderData['payments'] ?? [],
-                'order_date' => Carbon::parse($orderData['date_created']),
+                'json_order' => $orderData,
                 'date_created' => Carbon::parse($orderData['date_created']),
             ]
         );
+
+        // 5. Salvar Itens do Pedido separadamente
+        foreach ($orderData['order_items'] ?? [] as $itemData) {
+            \App\Models\OrderItem::updateOrCreate(
+                ['order_id' => $order->id, 'external_id' => $itemData['item']['id'] ?? uniqid()],
+                [
+                    'sku' => $itemData['item']['seller_sku'] ?? null,
+                    'title' => $itemData['item']['title'] ?? 'Item',
+                    'quantity' => $itemData['quantity'] ?? 1,
+                    'unit_price' => $itemData['unit_price'] ?? 0,
+                    'unit_cost' => 0
+                ]
+            );
+        }
     }
 }
