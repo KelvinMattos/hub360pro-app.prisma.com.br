@@ -35,9 +35,13 @@ class MeliMarketingService
         $sellerId = $credential->seller_id;
 
         try {
+            // Garante que o token está válido antes de prosseguir
+            $this->api->ensureTokenIsValid();
+            $credential = $this->api->getCredential();
+
             // Nova API Meli (2024+): Requer site_id = MLB e advertiser_id no endpoint
             $endpoint = "/advertising/MLB/advertisers/{$sellerId}/product_ads/campaigns/search";
-            
+
             // Requer Cabeçalho Customizado: api-version: 2
             $response = \Illuminate\Support\Facades\Http::withToken($credential->access_token)
                 ->withHeaders([

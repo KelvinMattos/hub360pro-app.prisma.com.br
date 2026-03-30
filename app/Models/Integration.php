@@ -60,7 +60,7 @@ class Integration extends Model
         
         if (!$expiration) return true;
         
-        return $expiration->isBefore(now()->addMinutes(10));
+        return $expiration->isBefore(now()->addMinutes(60));
     }
 
     public function company()

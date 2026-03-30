@@ -76,18 +76,29 @@ class MercadoLivreApiService
             return null;
         }
 
-        return Http::withToken($this->credential->access_token)
+        $response = Http::withToken($this->credential->access_token)
             ->retry(3, 2000, function ($exception, $request) {
             // Tenta novamente apenas se for erro de Rate Limit (429)
             return $exception instanceof \Illuminate\Http\Client\RequestException && $exception->response->status() === 429;
         })
             ->$method($this->baseUrl . $endpoint, $options);
+
+        // Se falhar com 401, tenta renovar o token e repetir uma única vez
+        if ($response->status() === 401) {
+            Log::warning("Meli Request 401: Token inválido. Tentando refresh e retry para Company: {$this->credential->company_id}");
+            if ($this->refreshToken()) {
+                return Http::withToken($this->credential->access_token)
+                    ->$method($this->baseUrl . $endpoint, $options);
+            }
+        }
+
+        return $response;
     }
 
     /**
      * Garante que o access_token é válido, realizando o refresh se necessário.
      */
-    protected function ensureTokenIsValid(): void
+    public function ensureTokenIsValid(): void
     {
         if (!$this->credential) {
             return;
@@ -118,12 +129,18 @@ class MercadoLivreApiService
         Log::info("Renovando token Mercado Livre para Company: {$this->credential->company_id}");
 
         try {
-            $response = Http::asForm()->post($this->baseUrl . '/oauth/token', [
-                'grant_type' => 'refresh_token',
-                'client_id' => $clientId,
-                'client_secret' => $clientSecret,
-                'refresh_token' => $refreshToken,
-            ]);
+            $response = Http::asForm()
+                ->retry(3, 3000, function ($exception, $request) {
+                    // Retenta em caso de erro 429 ou exceção de rede
+                    return $exception instanceof \Illuminate\Http\Client\RequestException && 
+                           ($exception->response->status() === 429 || $exception->response->status() >= 500);
+                })
+                ->post($this->baseUrl . '/oauth/token', [
+                    'grant_type' => 'refresh_token',
+                    'client_id' => $clientId,
+                    'client_secret' => $clientSecret,
+                    'refresh_token' => $refreshToken,
+                ]);
 
             if ($response->successful()) {
                 $data = $response->json();
