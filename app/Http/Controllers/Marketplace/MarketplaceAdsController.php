@@ -48,11 +48,11 @@ class MarketplaceAdsController extends Controller
             ->where('orders.cost_fee_ads', '>', 0)
             ->select(
                 'order_items.external_item_id as product_external_id', 
-                'order_items.product_title', 
+                'order_items.title', 
                 DB::raw('SUM(orders.total_amount) as sales'), 
                 DB::raw('SUM(orders.cost_fee_ads) as spend')
             )
-            ->groupBy('order_items.external_item_id', 'order_items.product_title')
+            ->groupBy('order_items.external_item_id', 'order_items.title')
             ->orderBy('sales', 'desc')
             ->take(10)
             ->get();

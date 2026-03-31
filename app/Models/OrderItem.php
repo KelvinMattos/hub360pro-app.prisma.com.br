@@ -13,7 +13,7 @@ class OrderItem extends Model
         'company_id',
         'order_id',
         'product_id', // Chave estrangeira crucial
-        'product_title',
+        'title',
         'sku',
         'quantity',
         'unit_price',
