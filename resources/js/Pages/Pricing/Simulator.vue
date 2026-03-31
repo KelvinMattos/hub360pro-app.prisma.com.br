@@ -22,7 +22,7 @@
                                     class="w-full bg-black/[0.03] border-none rounded-2xl py-4 px-6 text-sm font-bold focus:ring-2 focus:ring-blue-500 appearance-none">
                                 <option value="" disabled>Escolha um produto da sua base...</option>
                                 <option v-for="product in products" :key="product.id" :value="product.id">
-                                    {{ product.name }} ({{ product.sku }})
+                                    {{ product.title }} ({{ product.sku }})
                                 </option>
                             </select>
                             <div class="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -33,11 +33,11 @@
                         <div v-if="selectedProduct" class="mt-6 pt-6 border-t border-black/[0.04] space-y-4">
                             <div class="flex justify-between text-xs font-bold">
                                 <span class="text-slate-400 uppercase">Preço Atual</span>
-                                <span class="text-slate-900">R$ {{ formatCurrency(selectedProduct.price) }}</span>
+                                <span class="text-slate-900">R$ {{ formatCurrency(selectedProduct.sale_price) }}</span>
                             </div>
                             <div class="flex justify-between text-xs font-bold">
                                 <span class="text-slate-400 uppercase">Custo de Compra</span>
-                                <span class="text-slate-900">R$ {{ formatCurrency(selectedProduct.cost_price || selectedProduct.price * 0.4) }}</span>
+                                <span class="text-slate-900">R$ {{ formatCurrency(selectedProduct.cost_price || selectedProduct.sale_price * 0.4) }}</span>
                             </div>
                         </div>
                     </div>
@@ -192,7 +192,14 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import axios from 'axios';
 
 const props = defineProps({
-    products: Array
+    products: {
+        type: Array,
+        default: () => []
+    },
+    savedScenarios: {
+        type: Array,
+        default: () => []
+    }
 });
 
 const form = ref({
@@ -205,7 +212,7 @@ const loading = ref(false);
 const result = ref(null);
 
 const selectedProduct = computed(() => {
-    return props.products.find(p => p.id === form.value.product_id);
+    return (props.products || []).find(p => p.id === form.value.product_id) || null;
 });
 
 const resetSimulation = () => {

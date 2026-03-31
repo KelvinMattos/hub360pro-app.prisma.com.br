@@ -48,9 +48,9 @@ Route::middleware(['auth'])->group(function () {
         // Módulo 1: Motor de Precificação & Simulador 360 PRO
         Route::prefix('pricing')->name('pricing.')->group(function () {
             Route::get('/simulator', [PricingSimulationController::class , 'index'])->name('simulator');
-            Route::post('/simulator', [PricingSimulationController::class , 'store'])->name('store');
-        }
-        );
+            Route::post('/simulator/simulate', [PricingSimulationController::class , 'simulate'])->name('simulate');
+            Route::post('/simulator/store', [PricingSimulationController::class , 'store'])->name('store');
+        });
 
         // Hub 360 PRO: Monitor de Integrações
         Route::get('/hub/monitor', function () {
@@ -173,9 +173,6 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/settings/account', [UserController::class, 'update'])->name('settings.account.update');
         Route::put('/settings/account/password', [UserController::class, 'updatePassword'])->name('settings.account.password');
 
-        // Simulador "O Impossível"
-        Route::get('/pricing-simulator', [\App\Http\Controllers\PricingSimulatorController::class, 'index'])->name('pricing.impossivel');
-        Route::post('/pricing-simulator/simulate', [\App\Http\Controllers\PricingSimulatorController::class, 'simulate'])->name('pricing.simulate');
     });
 
 // 4. APIs e Webhooks (Públicos)
