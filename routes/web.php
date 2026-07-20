@@ -10,6 +10,7 @@ use App\Http\Controllers\MeliIntelligenceController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\Pricing\PricingSimulationController;
+use App\Http\Controllers\Pricing\CalculoPromoController;
 use App\Http\Controllers\Financial\HealthDashboardController;
 use App\Http\Controllers\Financial\FinancialDashboardController;
 use App\Http\Controllers\ReportController;
@@ -50,6 +51,9 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/simulator', [PricingSimulationController::class , 'index'])->name('simulator');
             Route::post('/simulator/simulate', [PricingSimulationController::class , 'simulate'])->name('simulate');
             Route::post('/simulator/store', [PricingSimulationController::class , 'store'])->name('store');
+
+            // Central de Cálculo Promocional — Todos os Canais (substitui a planilha CALCULO PROMO)
+            Route::get('/calculo-promo', [CalculoPromoController::class , 'index'])->name('calculo-promo');
         });
 
         // Hub 360 PRO: Monitor de Integrações

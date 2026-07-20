@@ -146,6 +146,7 @@ const navigation = [
             { label: 'War Room Meli', route: 'meli.war_room', icon: 'fa-solid fa-tower-broadcast' },
             { label: 'Reposição Inteligente', route: 'inventory.planning', icon: 'fa-solid fa-boxes-packing' },
             { label: 'Simulador 360', route: 'pricing.simulator', icon: 'fa-solid fa-calculator' },
+            { label: 'Cálculo Promo', route: 'pricing.calculo-promo', activePattern: 'pricing.calculo-promo', icon: 'fa-solid fa-tags' },
         ]
     },
     {
