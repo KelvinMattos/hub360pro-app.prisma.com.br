@@ -25,9 +25,9 @@
                 <div v-for="section in navigation" :key="section.title" class="mb-8">
                     <p class="px-5 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600 mb-4 opacity-80 decoration-slate-300">{{ section.title }}</p>
                     <div class="space-y-0.5">
-                        <NavLink v-for="item in section.items" :key="item.label" 
-                                :href="route(item.route)" 
-                                :active="route().current(item.activePattern || item.route)" 
+                        <NavLink v-for="item in section.items" :key="item.label"
+                                :href="route(item.route, item.params || undefined)"
+                                :active="item.params ? route().current(item.route, item.params) : route().current(item.activePattern || item.route)"
                                 :icon="item.icon">
                             {{ item.label }}
                         </NavLink>
@@ -147,6 +147,15 @@ const navigation = [
             { label: 'Reposição Inteligente', route: 'inventory.planning', icon: 'fa-solid fa-boxes-packing' },
             { label: 'Simulador 360', route: 'pricing.simulator', icon: 'fa-solid fa-calculator' },
             { label: 'Cálculo Promo', route: 'pricing.calculo-promo', activePattern: 'pricing.calculo-promo', icon: 'fa-solid fa-tags' },
+        ]
+    },
+    {
+        title: 'Importações Magazord',
+        items: [
+            { label: 'Importar Estoque', route: 'magazord.show', params: { type: 'estoque' }, icon: 'fa-solid fa-boxes-stacked' },
+            { label: 'Importar Custos de Produtos', route: 'magazord.show', params: { type: 'custos' }, icon: 'fa-solid fa-money-bill-trend-up' },
+            { label: 'Importar Preços de Venda', route: 'magazord.show', params: { type: 'precos' }, icon: 'fa-solid fa-tags' },
+            { label: 'Importar Vendas', route: 'magazord.show', params: { type: 'vendas' }, icon: 'fa-solid fa-cart-shopping' },
         ]
     },
     {

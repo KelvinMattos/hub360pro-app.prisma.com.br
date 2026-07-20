@@ -11,6 +11,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\Pricing\PricingSimulationController;
 use App\Http\Controllers\Pricing\CalculoPromoController;
+use App\Http\Controllers\Magazord\MagazordImportController;
 use App\Http\Controllers\Financial\HealthDashboardController;
 use App\Http\Controllers\Financial\FinancialDashboardController;
 use App\Http\Controllers\ReportController;
@@ -54,6 +55,14 @@ Route::middleware(['auth'])->group(function () {
 
             // Central de Cálculo Promocional — Todos os Canais (substitui a planilha CALCULO PROMO)
             Route::get('/calculo-promo', [CalculoPromoController::class , 'index'])->name('calculo-promo');
+        });
+
+        // Importações Magazord — alimenta o banco a partir dos modelos exportados pelo Magazord
+        Route::prefix('imports/magazord')->name('magazord.')->group(function () {
+            Route::get('/{type}', [MagazordImportController::class , 'show'])
+                ->whereIn('type', ['estoque', 'custos', 'precos', 'vendas'])->name('show');
+            Route::post('/{type}', [MagazordImportController::class , 'import'])
+                ->whereIn('type', ['estoque', 'custos', 'precos', 'vendas'])->name('import');
         });
 
         // Hub 360 PRO: Monitor de Integrações
