@@ -100,6 +100,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/meli/trends', [MeliIntelligenceController::class, 'trends'])->name('meli.trends');
         Route::get('/meli/market-share', [MeliIntelligenceController::class, 'marketShare'])->name('meli.market_share');
         Route::get('/inventory/planning', [InventoryController::class , 'planning'])->name('inventory.planning');
+        Route::get('/inventory/aging', [InventoryController::class , 'aging'])->name('inventory.aging');
         Route::get('/meli/calculator', [MeliIntelligenceController::class , 'calculator'])->name('meli.calculator');
 
         // Relatórios & BI

@@ -47,4 +47,101 @@ class InventoryController extends Controller
     {
         return redirect()->route('dashboard')->with('info', 'Calculadora em breve');
     }
+
+    /**
+     * Aging de Estoque — distribui os produtos com estoque por faixa de idade
+     * (com base na Data de Lançamento importada do Magazord) e destaca o valor
+     * imobilizado, para apoiar decisões de promoção/liquidação.
+     */
+    public function aging(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->company_id) {
+            return redirect()->route('dashboard');
+        }
+
+        $products = \App\Models\Product::query()
+            ->select('sku', 'title', 'brand', 'stock_quantity', 'cost_price', 'sale_price', 'launched_at')
+            ->where('stock_quantity', '>', 0)
+            ->get();
+
+        $order = ['Menos de 6 meses', 'Mais de 6 meses', '1 ano', '1 ano e meio', '2 anos', '+2 anos', 'Sem data'];
+        $buckets = [];
+        foreach ($order as $label) {
+            $buckets[$label] = ['label' => $label, 'count' => 0, 'units' => 0, 'cost_value' => 0.0];
+        }
+
+        $now = now();
+        $agedThreshold = ['1 ano', '1 ano e meio', '2 anos', '+2 anos']; // >= 12 meses
+        $oldest = [];
+        $totalUnits = 0; $totalCost = 0.0; $agedCost = 0.0;
+
+        foreach ($products as $p) {
+            $units = (int) $p->stock_quantity;
+            $stockValue = (float) $p->cost_price * $units;
+            $bucket = 'Sem data';
+            $ageMonths = null;
+
+            if ($p->launched_at) {
+                $ageMonths = (int) abs($p->launched_at->diffInMonths($now));
+                $bucket = $this->ageBucket($ageMonths);
+            }
+
+            $buckets[$bucket]['count']++;
+            $buckets[$bucket]['units'] += $units;
+            $buckets[$bucket]['cost_value'] += $stockValue;
+
+            $totalUnits += $units;
+            $totalCost += $stockValue;
+            if (in_array($bucket, $agedThreshold, true)) {
+                $agedCost += $stockValue;
+            }
+
+            if ($p->launched_at) {
+                $oldest[] = [
+                    'sku' => $p->sku,
+                    'title' => $p->title,
+                    'brand' => $p->brand,
+                    'launched_at' => $p->launched_at->format('Y-m-d'),
+                    'age_months' => $ageMonths,
+                    'bucket' => $bucket,
+                    'stock' => $units,
+                    'cost_price' => (float) $p->cost_price,
+                    'sale_price' => (float) $p->sale_price,
+                    'stock_value' => $stockValue,
+                ];
+            }
+        }
+
+        usort($oldest, fn ($a, $b) => strcmp($a['launched_at'], $b['launched_at']));
+        $oldest = array_slice($oldest, 0, 60);
+
+        $stats = [
+            'total_skus' => $products->count(),
+            'total_units' => $totalUnits,
+            'total_cost_value' => $totalCost,
+            'aged_cost_value' => $agedCost,
+            'aged_pct' => $totalCost > 0 ? round($agedCost / $totalCost * 100, 1) : 0,
+            'without_date' => $buckets['Sem data']['count'],
+        ];
+
+        return \Inertia\Inertia::render('Inventory/Aging', [
+            'buckets' => array_values($buckets),
+            'stats' => $stats,
+            'oldest' => $oldest,
+        ]);
+    }
+
+    /** Faixa de idade (meses desde o lançamento) — alinhada ao Cálculo Promo. */
+    private function ageBucket(int $months): string
+    {
+        return match (true) {
+            $months < 6 => 'Menos de 6 meses',
+            $months < 12 => 'Mais de 6 meses',
+            $months < 18 => '1 ano',
+            $months < 24 => '1 ano e meio',
+            $months < 30 => '2 anos',
+            default => '+2 anos',
+        };
+    }
 }

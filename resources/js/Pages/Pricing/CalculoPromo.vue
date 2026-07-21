@@ -327,6 +327,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 
 const props = defineProps({
     defaults: { type: Object, required: true },
+    launchedDates: { type: Object, default: () => ({}) },
 });
 
 /* ---------------- constantes de modelo ---------------- */
@@ -519,8 +520,27 @@ function buildSimpleIndex(rows, keyField, valField) {
 }
 
 /* ---------------- motor de cálculo ---------------- */
+function bucketFromMonths(months) {
+    if (months < 6) return 'Menos de 6 meses';
+    if (months < 12) return 'Mais de 6 meses';
+    if (months < 18) return '1 ano';
+    if (months < 24) return '1 ano e meio';
+    if (months < 30) return '2 anos';
+    return '+2 anos';
+}
+
 function tempoEstoque(sku) {
-    // Réplica fiel da fórmula do Excel: VALUE(LEFT(sku, FIND("-") ou FIND("_") -1)).
+    // 1) Preferência: data real de lançamento importada do Magazord (launched_at).
+    const d = props.launchedDates ? props.launchedDates[sku] : null;
+    if (d) {
+        const launch = new Date(d + 'T00:00:00');
+        if (!isNaN(launch.getTime())) {
+            const now = new Date();
+            const months = (now.getFullYear() - launch.getFullYear()) * 12 + (now.getMonth() - launch.getMonth());
+            return bucketFromMonths(Math.max(0, months));
+        }
+    }
+    // 2) Fallback: heurística por prefixo de SKU (VALUE(LEFT(sku, FIND("-") ou FIND("_") -1))).
     const s = String(sku);
     const iDash = s.indexOf('-');
     const iUnder = s.indexOf('_');

@@ -26,8 +26,17 @@ class CalculoPromoController extends Controller
      */
     public function index(Request $request)
     {
+        // Datas reais de lançamento (importadas do Magazord) para o cálculo do
+        // tempo de estoque — substituem a heurística por prefixo de SKU quando existem.
+        $launchedDates = \App\Models\Product::whereNotNull('launched_at')
+            ->whereNotNull('sku')
+            ->pluck('launched_at', 'sku')
+            ->map(fn ($d) => $d?->format('Y-m-d'))
+            ->filter();
+
         return Inertia::render('Pricing/CalculoPromo', [
             'defaults' => self::defaultConfig(),
+            'launchedDates' => $launchedDates,
         ]);
     }
 
