@@ -181,6 +181,31 @@ class MagazordImportController extends Controller
         return mb_check_encoding($v, 'UTF-8') ? $v : mb_convert_encoding($v, 'UTF-8', 'ISO-8859-1');
     }
 
+    /** Colunas reais da tabela products (cache por request). */
+    private function productColumns(): array
+    {
+        static $cols = null;
+        if ($cols === null) {
+            try {
+                $cols = Schema::getColumnListing('products');
+            } catch (\Throwable $e) {
+                $cols = [];
+            }
+        }
+        return $cols;
+    }
+
+    /**
+     * Remove do payload as chaves que não existem na tabela products.
+     * Evita que um campo ausente (brand, dimensões, etc.) derrube o import
+     * inteiro com "Unknown column".
+     */
+    private function prune(array $payload): array
+    {
+        $cols = $this->productColumns();
+        return empty($cols) ? $payload : array_intersect_key($payload, array_flip($cols));
+    }
+
     /** Normaliza número no padrão BR ("1.674,14" -> 1674.14). */
     private function brNumber($value): ?float
     {
@@ -362,18 +387,18 @@ class MagazordImportController extends Controller
                 }
 
                 if ($skuToId->has($sku)) {
-                    Product::where('id', $skuToId[$sku])->update($payload);
+                    Product::where('id', $skuToId[$sku])->update($this->prune($payload));
                     $updated++;
                 } elseif ($createMissing) {
                     $ativo = mb_strtolower((string) $this->col($row, ['Ativo', 'Produto Ativo'])) !== 'não'
                         && mb_strtolower((string) $this->col($row, ['Ativo', 'Produto Ativo'])) !== 'nao';
-                    $p = Product::create(array_merge($payload, [
+                    $p = Product::create($this->prune(array_merge($payload, [
                         'company_id' => $companyId,
                         'sku' => $sku,
                         'title' => $this->col($row, ['Produto', 'Produto Nome']) ?: $sku,
                         'brand' => $this->col($row, ['Marca']),
                         'status' => $ativo ? 'active' : 'inactive',
-                    ]));
+                    ])));
                     $skuToId[$sku] = $p->id;
                     $created++;
                 } else {
@@ -425,7 +450,7 @@ class MagazordImportController extends Controller
                 if (empty($payload)) { $skipped++; continue; }
 
                 if ($skuToId->has($sku)) {
-                    Product::where('id', $skuToId[$sku])->update($payload);
+                    Product::where('id', $skuToId[$sku])->update($this->prune($payload));
                     $updated++;
                 } else {
                     $notFound++;
@@ -484,19 +509,20 @@ class MagazordImportController extends Controller
                 }
 
                 if ($skuToId->has($sku)) {
-                    if (!empty($payload)) {
-                        Product::where('id', $skuToId[$sku])->update($payload);
+                    $safe = $this->prune($payload);
+                    if (!empty($safe)) {
+                        Product::where('id', $skuToId[$sku])->update($safe);
                     }
                     $updated++;
                 } elseif ($createMissing && mb_strtolower((string) $this->col($row, ['Tipo Registro'])) !== 'pai') {
                     // cria apenas variações ("Filho"), evitando os códigos "Pai"/OLD_*
                     $ativo = mb_strtolower((string) $this->col($row, ['Ativo'])) === 'sim';
-                    $p = Product::create(array_merge($payload, [
+                    $p = Product::create($this->prune(array_merge($payload, [
                         'company_id' => $companyId,
                         'sku' => $sku,
                         'title' => $this->col($row, ['Produto - Derivação', 'Nome da Derivação']) ?: $sku,
                         'status' => $ativo ? 'active' : 'inactive',
-                    ]));
+                    ])));
                     $skuToId[$sku] = $p->id;
                     $created++;
                 } else {
