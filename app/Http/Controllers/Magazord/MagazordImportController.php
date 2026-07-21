@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Carbon;
@@ -91,6 +92,62 @@ class MagazordImportController extends Controller
         ],
     ];
 
+    /* ---------------- progresso ao vivo (cache de arquivo) ---------------- */
+    private ?string $progressKey = null;
+    private int $progTotal = 0;
+    private int $progDone = 0;
+
+    private function progressStore()
+    {
+        // Store de arquivo: visível entre processos e imune a transação de BD.
+        return Cache::store('file');
+    }
+
+    private function initProgress(?string $token, int $total): void
+    {
+        $this->progressKey = $token ? 'mgz_import_' . preg_replace('/[^a-zA-Z0-9_-]/', '', $token) : null;
+        $this->progTotal = $total;
+        $this->progDone = 0;
+        $this->writeProgress('processing');
+    }
+
+    private function tick(): void
+    {
+        $this->progDone++;
+        if ($this->progressKey && ($this->progDone % 250 === 0)) {
+            $this->writeProgress('processing');
+        }
+    }
+
+    private function writeProgress(string $status, array $extra = []): void
+    {
+        if (!$this->progressKey) return;
+        $this->progressStore()->put($this->progressKey, array_merge([
+            'status' => $status,
+            'done' => $this->progDone,
+            'total' => $this->progTotal,
+        ], $extra), now()->addMinutes(15));
+    }
+
+    /** Conta as linhas de dados do CSV (rápido) para estimar o total. */
+    private function countRows(string $path): int
+    {
+        $fh = @fopen($path, 'r');
+        if (!$fh) return 0;
+        $c = 0;
+        while (fgets($fh) !== false) $c++;
+        fclose($fh);
+        return max(0, $c - 1); // desconta o cabeçalho
+    }
+
+    /** Endpoint de consulta de progresso (sem sessão, para não travar). */
+    public function progress(string $token)
+    {
+        $key = 'mgz_import_' . preg_replace('/[^a-zA-Z0-9_-]/', '', $token);
+        $data = Cache::store('file')->get($key) ?: ['status' => 'pending', 'done' => 0, 'total' => 0];
+        return response()->json($data)->header('Cache-Control', 'no-store');
+    }
+
     /** Renderiza a página de importação para um tipo. */
     public function show(string $type)
     {
@@ -134,6 +191,9 @@ class MagazordImportController extends Controller
                 ->with('error', 'O arquivo enviado é um HTML (provável erro de exportação do Magazord), não uma planilha. Reexporte o relatório como CSV e tente novamente.');
         }
 
+        // Progresso ao vivo: token vindo do frontend + total de linhas do arquivo.
+        $this->initProgress((string) $request->input('progress_token', '') ?: null, $this->countRows($path));
+
         $summary = match ($type) {
             'estoque' => $this->importEstoque($this->readRows($path)),
             'custos' => $this->importCustos($this->readRows($path), $createMissing),
@@ -142,6 +202,8 @@ class MagazordImportController extends Controller
             'produtos' => $this->importProdutos($this->readRows($path), $createMissing),
             'vendas' => $this->importVendas($this->readRows($path), $createMissing),
         };
+
+        $this->writeProgress('done', ['result' => $summary]);
 
         return redirect()->route('magazord.show', ['type' => $type])
             ->with('importResult', $summary)
@@ -252,7 +314,7 @@ class MagazordImportController extends Controller
         DB::beginTransaction();
         try {
             foreach ($records as $row) {
-                $rows++;
+                $rows++; $this->tick();
                 $sku = $this->col($row, ['Produto/Derivação Código Der.', 'Código Der.', 'Código']);
                 if ($sku === null || $sku === '') continue;
                 $qtyRaw = $this->col($row, ['Quantidade Física', 'Quantidade Disp. Venda']);
@@ -294,7 +356,7 @@ class MagazordImportController extends Controller
         DB::beginTransaction();
         try {
             foreach ($records as $row) {
-                $rows++;
+                $rows++; $this->tick();
                 $sku = $this->col($row, ['Código']);
                 if ($sku === null || $sku === '') { $skipped++; continue; }
                 $cost = $this->brNumber($this->col($row, ['Valor Atual']));
@@ -356,7 +418,7 @@ class MagazordImportController extends Controller
         DB::beginTransaction();
         try {
             foreach ($records as $row) {
-                $rows++;
+                $rows++; $this->tick();
                 $sku = $this->col($row, ['Produto Código', 'Código', 'Código Produto']);
                 if ($sku === null || $sku === '') { $skipped++; continue; }
 
@@ -444,7 +506,7 @@ class MagazordImportController extends Controller
         DB::beginTransaction();
         try {
             foreach ($records as $row) {
-                $rows++;
+                $rows++; $this->tick();
                 $sku = $this->col($row, ['Produto', 'Código']);
                 if ($sku === null || $sku === '') { $skipped++; continue; }
 
@@ -496,7 +558,7 @@ class MagazordImportController extends Controller
         DB::beginTransaction();
         try {
             foreach ($records as $row) {
-                $rows++;
+                $rows++; $this->tick();
                 $sku = $this->col($row, ['Código']);
                 if ($sku === null || $sku === '') { $skipped++; continue; }
 
@@ -584,7 +646,7 @@ class MagazordImportController extends Controller
         DB::beginTransaction();
         try {
             foreach ($records as $row) {
-                $rows++;
+                $rows++; $this->tick();
                 $externalId = $this->col($row, ['Pedido Id']);
                 if ($externalId === null || $externalId === '') { $skipped++; continue; }
 

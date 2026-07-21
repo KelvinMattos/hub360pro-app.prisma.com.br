@@ -30,6 +30,15 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [LoginController::class , 'login'])->name('login.process');
 });
 
+// Consulta de progresso de importação — sem sessão (evita lock de sessão que
+// travaria o polling durante a importação). Protegido pelo token aleatório.
+Route::get('/imports/magazord/progress/{token}', [MagazordImportController::class, 'progress'])
+    ->withoutMiddleware([
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+    ])
+    ->name('magazord.progress');
+
 // 3. Sistema Protegido (Middleware Higienizado)
 Route::middleware(['auth'])->group(function () {
 
