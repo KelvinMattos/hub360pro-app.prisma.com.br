@@ -18,7 +18,7 @@ class Product extends Model
         'weight', 'height', 'width', 'length',
         'category_id', 'listing_type_id', 'permalink', 'json_data',
         'video_id', 'shipping_mode', 'free_shipping', 'variations', 'sale_fee',
-        'launched_at', 'catalog_updated_at'
+        'launched_at', 'catalog_updated_at', 'channel_prices'
     ];
 
     protected $with = ['medias', 'channel_settings'];

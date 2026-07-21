@@ -351,6 +351,16 @@ class MagazordImportController extends Controller
                 if ($cost !== null && $cost > 0) $payload['cost_price'] = $cost;
                 if ($estoque !== null) $payload['stock_quantity'] = $estoque;
 
+                // Preços por canal (aproveita 100% do modelo Consulta Dinâmica).
+                $cp = [];
+                foreach ($priceChannels as $ch) {
+                    $v = $this->brNumber($this->col($row, [$ch]));
+                    if ($v !== null && $v > 0) $cp[$ch] = $v;
+                }
+                if ($cp && Schema::hasColumn('products', 'channel_prices')) {
+                    $payload['channel_prices'] = json_encode($cp, JSON_UNESCAPED_UNICODE);
+                }
+
                 if ($skuToId->has($sku)) {
                     Product::where('id', $skuToId[$sku])->update($payload);
                     $updated++;

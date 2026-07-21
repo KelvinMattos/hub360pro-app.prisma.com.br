@@ -59,8 +59,9 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/simulator/simulate', [PricingSimulationController::class , 'simulate'])->name('simulate');
             Route::post('/simulator/store', [PricingSimulationController::class , 'store'])->name('store');
 
-            // Central de Cálculo Promocional — Todos os Canais (substitui a planilha CALCULO PROMO)
+            // Central de Cálculo Promocional — Todos os Canais (direto do banco)
             Route::get('/calculo-promo', [CalculoPromoController::class , 'index'])->name('calculo-promo');
+            Route::get('/calculo-promo/export', [CalculoPromoController::class , 'export'])->name('calculo-promo.export');
 
             // Configuração de canais (comissões, taxas, markup) por empresa
             Route::get('/channels', [\App\Http\Controllers\Pricing\ChannelSettingsController::class , 'index'])->name('channels');

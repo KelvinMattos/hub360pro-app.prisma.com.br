@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Pricing;
 
 use App\Http\Controllers\Controller;
-use App\Services\ChannelConfigService;
+use App\Services\PromoCalculatorService;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,20 +26,85 @@ class CalculoPromoController extends Controller
      * A configuração padrão de canais, faixas e regras é entregue como prop
      * para permitir, no futuro, persistência por empresa (Multi-Tenancy).
      */
-    public function index(Request $request, ChannelConfigService $config)
+    /**
+     * Cálculo Promo direto do banco (sem upload), por canal, paginado.
+     */
+    public function index(Request $request, PromoCalculatorService $calc)
     {
-        // Datas reais de lançamento (importadas do Magazord) para o cálculo do
-        // tempo de estoque — substituem a heurística por prefixo de SKU quando existem.
-        $launchedDates = \App\Models\Product::whereNotNull('launched_at')
-            ->whereNotNull('sku')
-            ->pluck('launched_at', 'sku')
-            ->map(fn ($d) => $d?->format('Y-m-d'))
-            ->filter();
+        $companyId = Auth::user()?->company_id;
+        $cfg = $calc->config($companyId);
+        $data = $calc->compute($companyId, $cfg, (string) $request->query('channel', 'site'));
+
+        $rows = collect($data['rows']);
+        $search = trim((string) $request->query('q', ''));
+        if ($search !== '') {
+            $s = mb_strtolower($search);
+            $rows = $rows->filter(fn ($r) => str_contains(mb_strtolower($r['sku']), $s) || str_contains(mb_strtolower((string) $r['produto']), $s))->values();
+        }
+
+        $total = $rows->count();
+        $promosAbaixo = $rows->where('promo_menor', 'SIM')->count();
+        $semCusto = $rows->filter(fn ($r) => $r['custo'] <= 0)->count();
+
+        $perPage = 100;
+        $page = max(1, (int) $request->query('page', 1));
+        $lastPage = max(1, (int) ceil($total / $perPage));
 
         return Inertia::render('Pricing/CalculoPromo', [
-            'defaults' => $config->forCompany(Auth::user()?->company_id),
-            'launchedDates' => $launchedDates,
+            'channel' => $data['channel'],
+            'channels' => $data['channels'],
+            'globals' => $data['globals'],
+            'rows' => $rows->slice(($page - 1) * $perPage, $perPage)->values()->all(),
+            'stats' => ['total' => $total, 'promos_abaixo' => $promosAbaixo, 'sem_custo' => $semCusto],
+            'filters' => ['q' => $search, 'channel' => $data['channel']['key']],
+            'pagination' => ['page' => $page, 'perPage' => $perPage, 'total' => $total, 'lastPage' => $lastPage],
         ]);
+    }
+
+    /**
+     * Exporta o cálculo do canal em CSV (todos os produtos, respeitando a busca).
+     */
+    public function export(Request $request, PromoCalculatorService $calc)
+    {
+        $companyId = Auth::user()?->company_id;
+        $cfg = $calc->config($companyId);
+        $data = $calc->compute($companyId, $cfg, (string) $request->query('channel', 'site'));
+
+        $rows = collect($data['rows']);
+        $search = trim((string) $request->query('q', ''));
+        if ($search !== '') {
+            $s = mb_strtolower($search);
+            $rows = $rows->filter(fn ($r) => str_contains(mb_strtolower($r['sku']), $s) || str_contains(mb_strtolower((string) $r['produto']), $s));
+        }
+
+        $filename = 'calculo_promo_' . $data['channel']['key'] . '_' . now()->format('Ymd_His') . '.csv';
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"$filename\"",
+        ];
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            fprintf($out, "\xEF\xBB\xBF"); // BOM UTF-8 (Excel)
+            fputcsv($out, ['SKU', 'Produto', 'Marca', 'Estoque', 'Tempo Estoque', 'Custo', 'PV Atual', 'Ponto Equilíbrio', 'Meta Lucro', 'PV Promo Sugerido', 'Resultado Atual', 'Resultado Promo', '% Desc.', 'Promo < PV?'], ';');
+            foreach ($rows as $r) {
+                fputcsv($out, [
+                    $r['sku'], $r['produto'], $r['marca'], $r['estoque'], $r['tempo_estoque'],
+                    $this->br($r['custo']), $this->br($r['pv_atual']), $this->br($r['ponto_equilibrio']),
+                    $this->br($r['meta_lucro']), $this->br($r['promo_sugerido']), $this->br($r['resultado_atual']),
+                    $this->br($r['resultado_promo']),
+                    $r['perc_desc'] !== null ? number_format($r['perc_desc'] * 100, 1, ',', '') : '',
+                    $r['promo_menor'] ?? '',
+                ], ';');
+            }
+            fclose($out);
+        }, $filename, $headers);
+    }
+
+    /** Número no padrão BR para CSV. */
+    private function br($v): string
+    {
+        return $v === null ? '' : number_format((float) $v, 2, ',', '.');
     }
 
     /**
