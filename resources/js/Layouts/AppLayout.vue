@@ -173,6 +173,7 @@ const navigation = [
         title: 'Sistema',
         items: [
             { label: 'Conexões', route: 'settings.integrations', icon: 'fa-solid fa-plug' },
+            { label: 'Configurações do Sistema', route: 'settings.system', icon: 'fa-solid fa-gears' },
             { label: 'Minha Conta', route: 'settings.account', icon: 'fa-solid fa-user-gear' },
         ]
     }

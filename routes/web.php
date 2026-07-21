@@ -198,6 +198,10 @@ Route::middleware(['auth'])->group(function () {
         }
         );
 
+        // Configurações do Sistema (inclui Zona de Perigo — limpeza de emergência)
+        Route::get('/settings/system', [\App\Http\Controllers\SystemSettingsController::class, 'index'])->name('settings.system');
+        Route::post('/settings/system/reset-catalog', [\App\Http\Controllers\SystemSettingsController::class, 'resetCatalog'])->name('settings.system.reset_catalog');
+
         // Minha Conta
         Route::get('/settings/account', [UserController::class, 'edit'])->name('settings.account');
         Route::put('/settings/account', [UserController::class, 'update'])->name('settings.account.update');

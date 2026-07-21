@@ -2,9 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Services\CatalogResetService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Limpa o catálogo e as vendas para recomeçar as importações do zero.
@@ -21,32 +20,20 @@ class ResetCatalog extends Command
 
     protected $description = 'Remove todos os produtos, vendas e dados de produto (mantém usuários, empresas e configurações).';
 
-    /** Tabelas a limpar, se existirem. */
-    private array $tables = [
-        // Vendas
-        'order_items', 'order_notifications', 'orders',
-        // Produto e derivados
-        'product_channel_settings', 'product_medias', 'product_kits',
-        'products_meli', 'master_products', 'products',
-        // Estoque e listings
-        'stock_movements', 'stock_history', 'listing_histories',
-    ];
-
-    public function handle(): int
+    public function handle(CatalogResetService $service): int
     {
-        $existing = array_values(array_filter($this->tables, fn ($t) => Schema::hasTable($t)));
+        $preview = $service->preview();
 
-        if (empty($existing)) {
+        if (empty($preview)) {
             $this->warn('Nenhuma tabela alvo encontrada.');
             return self::SUCCESS;
         }
 
         $this->line('Tabelas que serão ESVAZIADAS (com contagem atual):');
-        $rows = [];
-        foreach ($existing as $t) {
-            $rows[] = [$t, number_format(DB::table($t)->count(), 0, ',', '.')];
-        }
-        $this->table(['Tabela', 'Registros'], $rows);
+        $this->table(['Tabela', 'Registros'], array_map(
+            fn ($r) => [$r['table'], number_format($r['count'], 0, ',', '.')],
+            $preview
+        ));
         $this->line('Preservadas: users, companies, channel_settings, pricing_settings, integrations e demais configurações.');
 
         if (!$this->option('force') && !$this->confirm('Confirma apagar TODOS esses registros? Esta ação é irreversível.')) {
@@ -54,17 +41,8 @@ class ResetCatalog extends Command
             return self::SUCCESS;
         }
 
-        Schema::disableForeignKeyConstraints();
-        try {
-            foreach ($existing as $t) {
-                DB::table($t)->truncate();
-                $this->line("  ✔ {$t} limpo");
-            }
-        } finally {
-            Schema::enableForeignKeyConstraints();
-        }
-
-        $this->info('Catálogo e vendas limpos. Pode recomeçar as importações.');
+        $result = $service->reset('cli');
+        $this->info("Catálogo e vendas limpos ({$result['total']} registros removidos). Pode recomeçar as importações.");
         $this->newLine();
         $this->line('Ordem sugerida de importação:');
         $this->line('  1) Preços de Venda (Consulta Dinâmica)  — MARQUE "criar produtos inexistentes"');
