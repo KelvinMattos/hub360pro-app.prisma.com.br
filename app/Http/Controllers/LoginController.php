@@ -12,7 +12,7 @@ class LoginController extends Controller
     public function showLoginForm()
     {
         if (Auth::check()) {
-            return redirect()->route('dashboard');
+            return redirect()->route('decision.index');
         }
         return Inertia::render('Auth/LoginPortal');
     }
@@ -28,7 +28,7 @@ class LoginController extends Controller
 
         if (Auth::attempt($credentials)) {
             $request->session()->regenerate();
-            return redirect()->intended('dashboard');
+            return redirect()->intended(route('decision.index'));
         }
 
         return back()->withErrors([

@@ -106,6 +106,15 @@ const flash = computed(() => page.props.flash || {});
 
 const navigation = [
     {
+        title: 'Decisão & Precificação',
+        items: [
+            { label: 'Centro de Decisão', route: 'decision.index', icon: 'fa-solid fa-chess-king' },
+            { label: 'Cálculo Promo', route: 'pricing.calculo-promo', activePattern: 'pricing.calculo-promo', icon: 'fa-solid fa-tags' },
+            { label: 'Aging de Estoque', route: 'inventory.aging', icon: 'fa-solid fa-hourglass-half' },
+            { label: 'Simulador 360', route: 'pricing.simulator', icon: 'fa-solid fa-calculator' },
+        ]
+    },
+    {
         title: 'Geral',
         items: [
             { label: 'Dashboard', route: 'dashboard', icon: 'fa-solid fa-gauge-high' },
@@ -145,9 +154,6 @@ const navigation = [
             { label: 'Relatórios & BI', route: 'reports.index', icon: 'fa-solid fa-chart-line' },
             { label: 'War Room Meli', route: 'meli.war_room', icon: 'fa-solid fa-tower-broadcast' },
             { label: 'Reposição Inteligente', route: 'inventory.planning', icon: 'fa-solid fa-boxes-packing' },
-            { label: 'Aging de Estoque', route: 'inventory.aging', icon: 'fa-solid fa-hourglass-half' },
-            { label: 'Simulador 360', route: 'pricing.simulator', icon: 'fa-solid fa-calculator' },
-            { label: 'Cálculo Promo', route: 'pricing.calculo-promo', activePattern: 'pricing.calculo-promo', icon: 'fa-solid fa-tags' },
         ]
     },
     {

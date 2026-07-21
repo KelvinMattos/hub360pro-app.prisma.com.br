@@ -36,6 +36,9 @@ Route::middleware(['auth'])->group(function () {
     // Dashboard Principal
     Route::get('/dashboard', [DashboardController::class , 'index'])->name('dashboard');
 
+    // Centro de Decisão Gerencial — cockpit de precificação sobre dados reais
+    Route::get('/decision', [\App\Http\Controllers\DecisionCenterController::class , 'index'])->name('decision.index');
+
     // Financeiro Inteligente (Dashboard CFO & DRE)
     Route::prefix('financial')->name('financial.')->group(function () {
         Route::get('/dashboard', [FinancialDashboardController::class , 'index'])->name('dashboard');
