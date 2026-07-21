@@ -30,18 +30,13 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [LoginController::class , 'login'])->name('login.process');
 });
 
-// Consulta de progresso de importação — sem sessão (evita lock de sessão que
-// travaria o polling durante a importação). Protegido pelo token aleatório.
+// Consulta de progresso de importação — polling via cache de arquivo.
+// Usa o stack web normal (com sessão). O driver de sessão do sistema
+// (database) NÃO usa lock bloqueante, então o POST de importação, mesmo
+// longo, não trava este GET. NÃO remover o StartSession daqui: sem sessão,
+// o VerifyCsrfToken quebra ao enfileirar o cookie XSRF-TOKEN, gerando o
+// flood "Session store not set on request" no log.
 Route::get('/imports/magazord/progress/{token}', [MagazordImportController::class, 'progress'])
-    ->withoutMiddleware([
-        \Illuminate\Session\Middleware\StartSession::class,
-        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
-        // Sem sessão, o VerifyCsrfToken quebra ao tentar enfileirar o cookie
-        // XSRF-TOKEN ("Session store not set on request"). Como é um GET de
-        // leitura protegido por token aleatório, o CSRF é dispensável aqui.
-        \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
-        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
-    ])
     ->name('magazord.progress');
 
 // 3. Sistema Protegido (Middleware Higienizado)
