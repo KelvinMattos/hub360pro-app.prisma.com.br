@@ -58,7 +58,8 @@ class PromoCalculatorService
         $hasPromo = Schema::hasColumn('products', 'promotional_price');
         $hasLaunch = Schema::hasColumn('products', 'launched_at');
 
-        $select = ['sku', 'title', 'brand', 'stock_quantity', 'cost_price', 'sale_price'];
+        $select = ['sku', 'title', 'stock_quantity', 'cost_price', 'sale_price'];
+        if (Schema::hasColumn('products', 'brand')) $select[] = 'brand';
         if ($hasChannelPrices) $select[] = 'channel_prices';
         if ($hasPromo) $select[] = 'promotional_price';
         if ($hasLaunch) $select[] = 'launched_at';

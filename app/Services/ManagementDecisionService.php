@@ -46,7 +46,8 @@ class ManagementDecisionService
         $hasPromo = Schema::hasColumn('products', 'promotional_price');
         $hasLaunch = Schema::hasColumn('products', 'launched_at');
 
-        $select = ['id', 'sku', 'title', 'brand', 'stock_quantity', 'cost_price', 'sale_price'];
+        $select = ['id', 'sku', 'title', 'stock_quantity', 'cost_price', 'sale_price'];
+        if (Schema::hasColumn('products', 'brand')) $select[] = 'brand';
         if ($hasPromo) $select[] = 'promotional_price';
         if ($hasLaunch) $select[] = 'launched_at';
 
@@ -208,7 +209,7 @@ class ManagementDecisionService
         return array_merge([
             'sku' => $p->sku,
             'title' => $p->title,
-            'brand' => $p->brand,
+            'brand' => $p->brand ?? null,
             'stock' => $stock,
             'cost' => round($cost, 2),
             'price' => round($price, 2),

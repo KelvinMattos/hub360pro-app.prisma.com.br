@@ -60,8 +60,12 @@ class InventoryController extends Controller
             return redirect()->route('dashboard');
         }
 
+        $cols = ['sku', 'title', 'stock_quantity', 'cost_price', 'sale_price'];
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'brand')) $cols[] = 'brand';
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'launched_at')) $cols[] = 'launched_at';
+
         $products = \App\Models\Product::query()
-            ->select('sku', 'title', 'brand', 'stock_quantity', 'cost_price', 'sale_price', 'launched_at')
+            ->select($cols)
             ->where('stock_quantity', '>', 0)
             ->get();
 
@@ -101,7 +105,7 @@ class InventoryController extends Controller
                 $oldest[] = [
                     'sku' => $p->sku,
                     'title' => $p->title,
-                    'brand' => $p->brand,
+                    'brand' => $p->brand ?? null,
                     'launched_at' => $p->launched_at->format('Y-m-d'),
                     'age_months' => $ageMonths,
                     'bucket' => $bucket,
