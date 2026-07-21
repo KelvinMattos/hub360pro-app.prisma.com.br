@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Services\InventoryIntelligenceService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Carbon;
 
 class InventoryController extends Controller
 {
@@ -60,13 +63,19 @@ class InventoryController extends Controller
             return redirect()->route('dashboard');
         }
 
+        // Usa DB::table (não o model Product) para evitar o eager-load de
+        // medias/channel_settings ($with) que pode quebrar se essas tabelas
+        // não existirem no banco.
+        $hasBrand = Schema::hasColumn('products', 'brand');
+        $hasLaunch = Schema::hasColumn('products', 'launched_at');
         $cols = ['sku', 'title', 'stock_quantity', 'cost_price', 'sale_price'];
-        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'brand')) $cols[] = 'brand';
-        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'launched_at')) $cols[] = 'launched_at';
+        if ($hasBrand) $cols[] = 'brand';
+        if ($hasLaunch) $cols[] = 'launched_at';
 
-        $products = \App\Models\Product::query()
-            ->select($cols)
+        $products = DB::table('products')
+            ->where('company_id', $user->company_id)
             ->where('stock_quantity', '>', 0)
+            ->select($cols)
             ->get();
 
         $order = ['Menos de 6 meses', 'Mais de 6 meses', '1 ano', '1 ano e meio', '2 anos', '+2 anos', 'Sem data'];
@@ -75,7 +84,7 @@ class InventoryController extends Controller
             $buckets[$label] = ['label' => $label, 'count' => 0, 'units' => 0, 'cost_value' => 0.0];
         }
 
-        $now = now();
+        $now = Carbon::now();
         $agedThreshold = ['1 ano', '1 ano e meio', '2 anos', '+2 anos']; // >= 12 meses
         $oldest = [];
         $totalUnits = 0; $totalCost = 0.0; $agedCost = 0.0;
@@ -85,10 +94,17 @@ class InventoryController extends Controller
             $stockValue = (float) $p->cost_price * $units;
             $bucket = 'Sem data';
             $ageMonths = null;
+            $launchedFmt = null;
 
-            if ($p->launched_at) {
-                $ageMonths = (int) abs($p->launched_at->diffInMonths($now));
-                $bucket = $this->ageBucket($ageMonths);
+            if (!empty($p->launched_at)) {
+                try {
+                    $c = Carbon::parse($p->launched_at);
+                    $ageMonths = (int) abs($c->diffInMonths($now));
+                    $bucket = $this->ageBucket($ageMonths);
+                    $launchedFmt = $c->format('Y-m-d');
+                } catch (\Throwable $e) {
+                    $ageMonths = null;
+                }
             }
 
             $buckets[$bucket]['count']++;
@@ -101,12 +117,12 @@ class InventoryController extends Controller
                 $agedCost += $stockValue;
             }
 
-            if ($p->launched_at) {
+            if ($launchedFmt !== null) {
                 $oldest[] = [
                     'sku' => $p->sku,
                     'title' => $p->title,
                     'brand' => $p->brand ?? null,
-                    'launched_at' => $p->launched_at->format('Y-m-d'),
+                    'launched_at' => $launchedFmt,
                     'age_months' => $ageMonths,
                     'bucket' => $bucket,
                     'stock' => $units,
