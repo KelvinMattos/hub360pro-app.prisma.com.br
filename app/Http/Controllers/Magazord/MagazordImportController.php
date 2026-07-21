@@ -52,12 +52,12 @@ class MagazordImportController extends Controller
         'precos' => [
             'title' => 'Importar Preços de Venda',
             'icon' => 'fa-solid fa-tags',
-            'target' => 'products.sale_price',
-            'key_label' => 'Produto Código / Código',
-            'value_label' => 'Preço Venda / Preço',
-            'description' => 'Atualiza o preço de venda dos produtos, cruzando pelo código do produto. Detecta automaticamente as colunas de código e de preço do modelo exportado.',
-            'columns' => ['Produto Código (ou Código)', 'Produto Nome', 'Preço Antigo', 'Preço Venda (ou Preço)'],
-            'can_create' => false,
+            'target' => 'products.sale_price + cost_price + stock_quantity',
+            'key_label' => 'Código',
+            'value_label' => 'Site (preço base) · Custo · Estoque',
+            'description' => 'Modelo "Consulta Dinâmica – Custo x Preço de Venda": atualiza o preço de venda (base = coluna "Site", ou o maior preço entre os canais), o custo e o estoque de uma vez, cruzando pelo Código. Também aceita um modelo simples com Produto Código / Preço Venda.',
+            'columns' => ['Código', 'Produto', 'Marca', 'Custo', 'Estoque', 'Site', 'Shopee', 'Mercado Livre', 'Centauro', 'Via Varejo', 'Magalu', 'Dafiti', 'Amazon', 'Netshoes', 'Ativo'],
+            'can_create' => true,
         ],
         'vendas' => [
             'title' => 'Importar Vendas',
@@ -111,7 +111,7 @@ class MagazordImportController extends Controller
         $summary = match ($type) {
             'estoque' => $this->importEstoque($this->readRows($path)),
             'custos' => $this->importCustos($this->readRows($path), $createMissing),
-            'precos' => $this->importPrecos($this->readRows($path)),
+            'precos' => $this->importPrecos($this->readRows($path), $createMissing),
             'vendas' => $this->importVendas($this->readRows($path), $createMissing),
         };
 
@@ -281,27 +281,69 @@ class MagazordImportController extends Controller
     }
 
     /* ============================================================
-     *  PREÇOS DE VENDA -> products.sale_price
+     *  PREÇOS DE VENDA -> products.sale_price (+ custo/estoque)
+     *
+     *  Aceita dois modelos:
+     *   - "Consulta Dinâmica – Custo x Preço de Venda" (PV ATUAL): tem
+     *     Código, Custo, Estoque e o preço por canal (Site, Shopee, ...).
+     *     Nesse caso atualiza sale_price (base = Site), cost_price e
+     *     stock_quantity de uma vez — preenche os dados que faltam.
+     *   - Modelo simples (Produto Código / Preço Venda): só sale_price.
      * ============================================================ */
-    private function importPrecos(iterable $records): array
+    private function importPrecos(iterable $records, bool $createMissing = false): array
     {
         $companyId = Auth::user()->company_id;
         $skuToId = Product::where('company_id', $companyId)
             ->whereNotNull('sku')->pluck('id', 'sku');
 
-        $updated = 0; $notFound = 0; $skipped = 0; $rows = 0;
+        $priceChannels = ['Site', 'Mercado Livre', 'Amazon', 'Netshoes', 'Shopee', 'Magalu', 'Centauro', 'Dafiti', 'Via Varejo'];
+
+        $updated = 0; $created = 0; $notFound = 0; $skipped = 0; $rows = 0;
         DB::beginTransaction();
         try {
             foreach ($records as $row) {
                 $rows++;
                 $sku = $this->col($row, ['Produto Código', 'Código', 'Código Produto']);
                 if ($sku === null || $sku === '') { $skipped++; continue; }
-                $price = $this->brNumber($this->col($row, ['Preço Venda', 'Preço', 'Preço Por']));
-                if ($price === null) { $skipped++; continue; }
+
+                // Preço base: "Site" quando > 0; senão o maior preço entre os canais.
+                $sitePrice = $this->brNumber($this->col($row, ['Site']));
+                $simplePrice = $this->brNumber($this->col($row, ['Preço Venda', 'Preço', 'Preço Por']));
+                $price = $sitePrice !== null ? $sitePrice : $simplePrice;
+                if ($price === null || $price <= 0) {
+                    $max = 0.0;
+                    foreach ($priceChannels as $ch) {
+                        $v = $this->brNumber($this->col($row, [$ch]));
+                        if ($v !== null && $v > $max) $max = $v;
+                    }
+                    $price = $max;
+                }
+                if ($price <= 0) { $skipped++; continue; }
+
+                // Custo e estoque (presentes no modelo Consulta Dinâmica).
+                $cost = $this->brNumber($this->col($row, ['Custo']));
+                $estoqueRaw = $this->col($row, ['Estoque']);
+                $estoque = $estoqueRaw !== null ? (int) round($this->brNumber($estoqueRaw) ?? 0) : null;
+
+                $payload = ['sale_price' => $price];
+                if ($cost !== null && $cost > 0) $payload['cost_price'] = $cost;
+                if ($estoque !== null) $payload['stock_quantity'] = $estoque;
 
                 if ($skuToId->has($sku)) {
-                    Product::where('id', $skuToId[$sku])->update(['sale_price' => $price]);
+                    Product::where('id', $skuToId[$sku])->update($payload);
                     $updated++;
+                } elseif ($createMissing) {
+                    $ativo = mb_strtolower((string) $this->col($row, ['Ativo', 'Produto Ativo'])) !== 'não'
+                        && mb_strtolower((string) $this->col($row, ['Ativo', 'Produto Ativo'])) !== 'nao';
+                    $p = Product::create(array_merge($payload, [
+                        'company_id' => $companyId,
+                        'sku' => $sku,
+                        'title' => $this->col($row, ['Produto', 'Produto Nome']) ?: $sku,
+                        'brand' => $this->col($row, ['Marca']),
+                        'status' => $ativo ? 'active' : 'inactive',
+                    ]));
+                    $skuToId[$sku] = $p->id;
+                    $created++;
                 } else {
                     $notFound++;
                 }
@@ -316,9 +358,9 @@ class MagazordImportController extends Controller
             'ok' => true,
             'rows' => $rows,
             'updated' => $updated,
-            'created' => 0,
+            'created' => $created,
             'skipped' => $notFound + $skipped,
-            'message' => "Preços importados: {$updated} atualizados, {$notFound} SKUs não encontrados (de {$rows} linhas).",
+            'message' => "Preços importados: {$updated} atualizados, {$created} criados, {$notFound} SKUs não encontrados (de {$rows} linhas). Preço de venda, custo e estoque atualizados quando presentes no arquivo.",
         ];
     }
 

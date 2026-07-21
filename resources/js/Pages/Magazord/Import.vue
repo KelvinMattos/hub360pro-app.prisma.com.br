@@ -22,11 +22,11 @@
                 </Link>
             </div>
 
-            <!-- Aviso para Preços de Venda (arquivo .xls corrompido) -->
-            <div v-if="type === 'precos'" class="bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3 rounded-xl mb-6">
-                <i class="fa-solid fa-triangle-exclamation mr-2"></i>
-                O modelo de "Preços de Venda" enviado veio como uma página de erro do Magazord (HTTP 500, arquivo <code class="k">.xls</code> em HTML).
-                Reexporte o relatório de preços <b>em formato CSV</b> no Magazord. O importador detecta automaticamente as colunas de código e de preço.
+            <!-- Nota para Preços de Venda (modelo Consulta Dinâmica) -->
+            <div v-if="type === 'precos'" class="bg-blue-50 border border-blue-200 text-blue-800 text-sm px-4 py-3 rounded-xl mb-6">
+                <i class="fa-solid fa-circle-info mr-2"></i>
+                Use o modelo <b>"Consulta Dinâmica – Custo x Preço de Venda"</b> exportado em CSV. Além do preço de venda
+                (base = coluna <code class="k">Site</code>), este importador também atualiza <b>custo</b> e <b>estoque</b> na mesma passada.
             </div>
 
             <!-- Resultado da última importação -->
