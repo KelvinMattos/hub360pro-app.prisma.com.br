@@ -114,7 +114,7 @@ class MagazordImportController extends Controller
     private function tick(): void
     {
         $this->progDone++;
-        if ($this->progressKey && ($this->progDone % 250 === 0)) {
+        if ($this->progressKey && ($this->progDone % 100 === 0)) {
             $this->writeProgress('processing');
         }
     }

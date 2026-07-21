@@ -76,8 +76,9 @@
         </div>
 
         <!-- ===== OVERLAY DE CARREGAMENTO ===== -->
+        <Teleport to="body">
         <transition name="fade">
-            <div v-if="phase !== 'idle'" class="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div v-if="phase !== 'idle'" class="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
                 <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
                     <div class="w-16 h-16 mx-auto mb-5 relative">
                         <div class="absolute inset-0 rounded-full border-4 border-slate-100"></div>
@@ -110,10 +111,12 @@
                 </div>
             </div>
         </transition>
+        </Teleport>
 
         <!-- ===== MODAL DE RESULTADO ===== -->
+        <Teleport to="body">
         <transition name="fade">
-            <div v-if="showResult && result" class="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" @click.self="showResult = false">
+            <div v-if="showResult && result" class="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" @click.self="showResult = false">
                 <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8">
                     <div class="text-center">
                         <div :class="['w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-3xl', result.ok ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600']">
@@ -136,6 +139,7 @@
                 </div>
             </div>
         </transition>
+        </Teleport>
     </AppLayout>
 </template>
 
@@ -185,7 +189,7 @@ function submit() {
     showResult.value = false;
     phase.value = 'uploading';
 
-    form.post(route('magazord.import', { type: props.type }), {
+    form.post(route('magazord.import', { type: props.type, progress_token: token }), {
         preserveScroll: true,
         forceFormData: true,
         onProgress: (e) => {
@@ -206,7 +210,9 @@ function startPoll(token) {
     stopPoll();
     pollTimer = setInterval(async () => {
         try {
-            const r = await fetch(route('magazord.progress', { token }), { headers: { Accept: 'application/json' } });
+            // URL manual + cache-busting para evitar cache de GET (Cloudflare/navegador).
+            const url = `/imports/magazord/progress/${encodeURIComponent(token)}?t=${Date.now()}`;
+            const r = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
             if (!r.ok) return;
             const d = await r.json();
             live.value = { done: d.done || 0, total: d.total || 0 };
