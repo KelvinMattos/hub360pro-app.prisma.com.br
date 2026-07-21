@@ -36,6 +36,11 @@ Route::get('/imports/magazord/progress/{token}', [MagazordImportController::clas
     ->withoutMiddleware([
         \Illuminate\Session\Middleware\StartSession::class,
         \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        // Sem sessão, o VerifyCsrfToken quebra ao tentar enfileirar o cookie
+        // XSRF-TOKEN ("Session store not set on request"). Como é um GET de
+        // leitura protegido por token aleatório, o CSRF é dispensável aqui.
+        \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
     ])
     ->name('magazord.progress');
 
