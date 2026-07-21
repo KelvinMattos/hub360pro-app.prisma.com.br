@@ -1,23 +1,16 @@
 ---
 # Deploy automático do cPanel (Git Version Control).
 #
-# Quando você clica em "Deploy HEAD Commit" no cPanel (ou dispara via API),
-# o cPanel faz o pull do repositório e executa as tarefas abaixo NO SERVIDOR.
-# É assim que os comandos PHP (composer/migrate/cache) rodam sem CLI manual.
+# Ao clicar em "Deploy HEAD Commit" no cPanel (aba Pull or Deploy), o cPanel
+# faz o pull do repositório e executa as tarefas abaixo NO SERVIDOR — é assim
+# que os comandos PHP (composer/migrate/cache) rodam sem CLI manual.
 #
-# IMPORTANTE — ajuste o caminho do PHP conforme sua hospedagem:
-#   - Comum no cPanel: /usr/local/bin/php   (ou uma versão: /usr/local/bin/ea-php83)
-#   Descubra em cPanel > "Selecionar versão do PHP" ou rode `which php` no Terminal.
-#
-# Se o seu repositório NÃO está clonado na mesma pasta em que o site roda,
-# adicione antes das tarefas um passo de cópia (rsync) para o DEPLOYPATH.
+# Cada tarefa detecta o PHP automaticamente (usa `php` do PATH; se não achar,
+# cai para /usr/local/bin/php). Se sua hospedagem usar uma versão específica,
+# troque por algo como /usr/local/bin/ea-php83.
 deployment:
   tasks:
-    # 1) Dependências PHP (usa o composer.phar já versionado no repositório)
-    - /usr/local/bin/php composer.phar install --no-dev --optimize-autoloader --no-interaction 2>&1 || true
-    # 2) Banco de dados: aplica as migrations (cria brand, launched_at, channel_prices, etc.)
-    - /usr/local/bin/php artisan migrate --force 2>&1
-    # 3) Limpa e regenera caches de rotas/config/views
-    - /usr/local/bin/php artisan optimize:clear 2>&1
-    # 4) Link de storage (idempotente)
-    - /usr/local/bin/php artisan storage:link 2>&1 || true
+    - 'PHP=$(command -v php || echo /usr/local/bin/php); $PHP composer.phar install --no-dev --optimize-autoloader --no-interaction 2>&1 || true'
+    - 'PHP=$(command -v php || echo /usr/local/bin/php); $PHP artisan migrate --force 2>&1'
+    - 'PHP=$(command -v php || echo /usr/local/bin/php); $PHP artisan optimize:clear 2>&1'
+    - 'PHP=$(command -v php || echo /usr/local/bin/php); $PHP artisan storage:link 2>&1 || true'

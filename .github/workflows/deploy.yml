@@ -1,0 +1,48 @@
+name: Deploy (SSH)
+
+# Deploy automático no push para a main (e botão manual em Actions).
+# Só roda de verdade quando os secrets de SSH estiverem configurados no repo:
+#   Settings > Secrets and variables > Actions:
+#     SSH_HOST     host/servidor cPanel (ex.: 187.x.x.x ou seu domínio)
+#     SSH_USER     usuário cPanel/SSH
+#     SSH_KEY      chave privada SSH (conteúdo completo) — recomendado
+#     SSH_PORT     porta SSH (opcional; padrão 22)
+#     APP_PATH     caminho da app no servidor (ex.: /home/kelvi593/app.prismaads.com.br)
+#
+# Os secrets ficam só no GitHub — nunca no código.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checar se o SSH está configurado
+        id: cfg
+        run: echo "ready=${{ secrets.SSH_HOST != '' && secrets.APP_PATH != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy via SSH
+        if: steps.cfg.outputs.ready == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd "${{ secrets.APP_PATH }}"
+            git pull origin main
+            PHP=$(command -v php || echo /usr/local/bin/php)
+            $PHP composer.phar install --no-dev --optimize-autoloader --no-interaction || true
+            $PHP artisan migrate --force
+            $PHP artisan optimize:clear
+            $PHP artisan storage:link || true
+            echo "Deploy concluído."
+
+      - name: SSH não configurado (ignorando)
+        if: steps.cfg.outputs.ready != 'true'
+        run: echo "Secrets de SSH ausentes — pulei o deploy. Configure SSH_HOST e APP_PATH para habilitar."
