@@ -61,6 +61,11 @@ Route::middleware(['auth'])->group(function () {
 
             // Central de Cálculo Promocional — Todos os Canais (substitui a planilha CALCULO PROMO)
             Route::get('/calculo-promo', [CalculoPromoController::class , 'index'])->name('calculo-promo');
+
+            // Configuração de canais (comissões, taxas, markup) por empresa
+            Route::get('/channels', [\App\Http\Controllers\Pricing\ChannelSettingsController::class , 'index'])->name('channels');
+            Route::post('/channels', [\App\Http\Controllers\Pricing\ChannelSettingsController::class , 'update'])->name('channels.update');
+            Route::post('/channels/reset', [\App\Http\Controllers\Pricing\ChannelSettingsController::class , 'reset'])->name('channels.reset');
         });
 
         // Importações Magazord — alimenta o banco a partir dos modelos exportados pelo Magazord
@@ -92,6 +97,9 @@ Route::middleware(['auth'])->group(function () {
         // Clientes
         Route::get('/customers', [CustomerController::class , 'index'])->name('customers.index');
         Route::get('/customers/{id}', [CustomerController::class , 'show'])->name('customers.show');
+
+        // Análise de Vendas (sobre pedidos importados)
+        Route::get('/sales', [\App\Http\Controllers\SalesController::class , 'index'])->name('sales.index');
 
         // Pedidos e Etiquetas
         Route::get('/orders', [OrderController::class , 'index'])->name('orders.index');

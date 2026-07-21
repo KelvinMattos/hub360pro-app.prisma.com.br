@@ -112,6 +112,7 @@ const navigation = [
             { label: 'Calculadora de Canais', route: 'calculator.index', icon: 'fa-solid fa-calculator' },
             { label: 'Cálculo Promo', route: 'pricing.calculo-promo', activePattern: 'pricing.calculo-promo', icon: 'fa-solid fa-tags' },
             { label: 'Aging de Estoque', route: 'inventory.aging', icon: 'fa-solid fa-hourglass-half' },
+            { label: 'Config. de Canais', route: 'pricing.channels', icon: 'fa-solid fa-sliders' },
             { label: 'Simulador 360', route: 'pricing.simulator', icon: 'fa-solid fa-flask' },
         ]
     },
@@ -132,6 +133,7 @@ const navigation = [
     {
         title: 'Vendas & Mercados',
         items: [
+            { label: 'Análise de Vendas', route: 'sales.index', icon: 'fa-solid fa-chart-simple' },
             { label: 'Pedidos & Etiquetas', route: 'orders.index', activePattern: 'orders.*', icon: 'fa-solid fa-truck-fast' },
             { label: 'Expedição Flash', route: 'orders.expedition', icon: 'fa-solid fa-barcode' },
             { label: 'Produtos', route: 'products.index', activePattern: 'products.*', icon: 'fa-solid fa-box' },

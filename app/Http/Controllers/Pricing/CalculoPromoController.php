@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Pricing;
 
 use App\Http\Controllers\Controller;
+use App\Services\ChannelConfigService;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * Central de Cálculo Promocional — Todos os Canais.
@@ -24,7 +26,7 @@ class CalculoPromoController extends Controller
      * A configuração padrão de canais, faixas e regras é entregue como prop
      * para permitir, no futuro, persistência por empresa (Multi-Tenancy).
      */
-    public function index(Request $request)
+    public function index(Request $request, ChannelConfigService $config)
     {
         // Datas reais de lançamento (importadas do Magazord) para o cálculo do
         // tempo de estoque — substituem a heurística por prefixo de SKU quando existem.
@@ -35,7 +37,7 @@ class CalculoPromoController extends Controller
             ->filter();
 
         return Inertia::render('Pricing/CalculoPromo', [
-            'defaults' => self::defaultConfig(),
+            'defaults' => $config->forCompany(Auth::user()?->company_id),
             'launchedDates' => $launchedDates,
         ]);
     }

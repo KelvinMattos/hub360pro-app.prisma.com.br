@@ -12,10 +12,21 @@
                         Precificação e capital sob controle — margem, ponto de equilíbrio e ações prioritárias sobre os {{ n(kpis.total_skus) }} produtos do seu catálogo.
                     </p>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5">
+                        <span class="text-xs text-slate-400 font-semibold uppercase tracking-wide">Canal</span>
+                        <select :value="channel.key" @change="changeChannel($event.target.value)" class="text-sm font-semibold text-slate-700 bg-transparent outline-none">
+                            <option v-for="c in channels" :key="c.key" :value="c.key">{{ c.label }}</option>
+                        </select>
+                    </div>
                     <Link :href="route('pricing.calculo-promo')" class="btn-ghost text-sm"><i class="fa-solid fa-tags mr-2"></i>Cálculo Promo</Link>
                     <Link :href="route('inventory.aging')" class="btn-ghost text-sm"><i class="fa-solid fa-hourglass-half mr-2"></i>Aging</Link>
                 </div>
+            </div>
+
+            <div class="mb-6 text-xs text-slate-500 bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-2 inline-block">
+                <i class="fa-solid fa-circle-info mr-1 text-indigo-400"></i>
+                Análise no canal <b class="text-indigo-700">{{ channel.label }}</b> — comissão {{ channel.comissao }}%, encargos totais {{ channel.encargos_pct }}%. Troque o canal para ver margem e alertas específicos.
             </div>
 
             <!-- KPIs -->
@@ -96,8 +107,8 @@
             </div>
 
             <p class="text-xs text-slate-400 mt-6">
-                Cálculo sobre o canal-base (loja/site): encargos de {{ globals.encargos_pct }}%
-                (imposto {{ globals.imposto }}% + MC {{ globals.mc }}% + comissão {{ globals.site_commission }}%).
+                Canal {{ channel.label }}: encargos de {{ channel.encargos_pct }}%
+                (imposto {{ globals.imposto }}% + MC {{ globals.mc }}% + comissão {{ channel.comissao }}%).
                 <span v-if="!globals.has_launch"> Importe "Produtos & Datas" para habilitar a idade de estoque.</span>
                 <span v-if="!globals.has_promo"> Importe "Produtos com Desconto" para avaliar promoções.</span>
             </p>
@@ -107,14 +118,20 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
 const props = defineProps({
     globals: { type: Object, default: () => ({}) },
+    channel: { type: Object, default: () => ({}) },
+    channels: { type: Array, default: () => [] },
     kpis: { type: Object, default: () => ({}) },
     alertas: { type: Object, default: () => ({}) },
 });
+
+function changeChannel(key) {
+    router.get(route('decision.index'), { channel: key }, { preserveScroll: true, preserveState: false });
+}
 
 const cards = [
     { key: 'prejuizo', title: 'Vendendo no prejuízo', subtitle: 'corrigir preço', icon: 'fa-solid fa-arrow-trend-down', color: 'text-red-600', activeRing: 'ring-2 ring-red-400', count: 'count_prejuizo', help: 'Produtos cujo preço de venda não cobre custo + encargos. Cada venda dá prejuízo — reajuste o preço ou reveja o custo.' },

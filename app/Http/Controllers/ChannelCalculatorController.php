@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Pricing\CalculoPromoController;
+use App\Services\ChannelConfigService;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 
 /**
@@ -15,10 +16,14 @@ use Inertia\Inertia;
  */
 class ChannelCalculatorController extends Controller
 {
+    public function __construct(private ChannelConfigService $config)
+    {
+    }
+
     public function index()
     {
         return Inertia::render('Calculator/Channels', [
-            'defaults' => CalculoPromoController::defaultConfig(),
+            'defaults' => $this->config->forCompany(Auth::user()?->company_id),
         ]);
     }
 }

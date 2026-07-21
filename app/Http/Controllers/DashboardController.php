@@ -2,111 +2,117 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Models\Order;
-use App\Models\Product;
+use App\Services\ManagementDecisionService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
-use App\Services\Financial\FinancialProrationService;
-use App\Services\MeliMarketingService;
-use App\Services\InventoryIntelligenceService;
-use Carbon\Carbon;
 
+/**
+ * Dashboard Gerencial (executivo).
+ *
+ * Visão de topo resiliente: vendas reais (pedidos importados), saúde de estoque
+ * e capital, e o resumo de decisão (margem, prejuízo, promoções perigosas) —
+ * com atalhos para o Centro de Decisão. Toda leitura é defensiva (guards de
+ * coluna/tabela e try/catch) para nunca derrubar a home.
+ */
 class DashboardController extends Controller
 {
-    protected $financialService;
-    protected $marketingService;
-    protected $inventoryService;
-
-    public function __construct(
-        FinancialProrationService $financialService,
-        MeliMarketingService $marketingService,
-        InventoryIntelligenceService $inventoryService
-    ) {
-        $this->financialService = $financialService;
-        $this->marketingService = $marketingService;
-        $this->inventoryService = $inventoryService;
-    }
-
-    public function index()
+    public function index(ManagementDecisionService $decision)
     {
         $user = Auth::user();
-
-        \Illuminate\Support\Facades\Log::info("Dashboard Access attempt", [
-            'user_id' => $user->id ?? 'null',
-            'company_id' => $user->company_id ?? 'null'
-        ]);
-
         if (!$user || !$user->company_id) {
-            \Illuminate\Support\Facades\Log::warning("Dashboard redirect: Missing user or company_id", ['user' => $user]);
             return redirect()->route('login');
         }
-
         $companyId = $user->company_id;
-        
-        $today = Carbon::now()->startOfDay();
-        $yesterday = Carbon::now()->subDay()->startOfDay();
 
-        // 1. Vendas Hoje vs Ontem
-        $salesToday = Order::where('company_id', $companyId)
-            ->whereIn('status', ['paid', 'shipped', 'delivered', 'accredited'])
-            ->where('created_at', '>=', $today)
-            ->sum('total_amount') ?? 0;
+        try {
+            $analysis = $decision->analyze($companyId);
+            $kpis = $analysis['kpis'];
+            $channel = $analysis['channel'];
+            $alertas = [
+                'prejuizo' => array_slice($analysis['alertas']['prejuizo'], 0, 6),
+                'liquidar' => array_slice($analysis['alertas']['liquidar'], 0, 6),
+                'oportunidade' => array_slice($analysis['alertas']['oportunidade'], 0, 6),
+            ];
+        } catch (\Throwable $e) {
+            $kpis = []; $channel = []; $alertas = [];
+        }
 
-        $salesYesterday = Order::where('company_id', $companyId)
-            ->whereIn('status', ['paid', 'shipped', 'delivered', 'accredited'])
-            ->whereBetween('created_at', [$yesterday, $today])
-            ->sum('total_amount') ?? 0;
-        
-        // 2. Status Operacional de Pedidos
-        $ordersPending = Order::where('company_id', $companyId)->where('status', 'paid')->count();
-        $ordersReady = Order::where('company_id', $companyId)->where('status', 'shipped')->count();
-        $ordersDelayed = Order::where('company_id', $companyId)
-            ->whereIn('status', ['paid'])
-            ->where('created_at', '<', now()->subDays(2))
-            ->count();
-
-        // 3. Saúde dos Anúncios e Inventário
-        $productsActive = Product::where('company_id', $companyId)->where('status', 'active')->count();
-        $productsPaused = Product::where('company_id', $companyId)->where('status', 'paused')->count();
-        $productsOutOfStock = Product::where('company_id', $companyId)->where('stock_quantity', '<=', 0)->count();
-
-        // 4. Previsão de Falta de Estoque (Inteligência)
-        $inventoryAlerts = $this->inventoryService->forCompany($companyId)->getStockOutPredictions($companyId);
-
-        // 5. Métricas de Marketing (Adivs)
-        $marketingMetrics = $this->marketingService->forCompany($companyId)->getMetrics();
-
-        // 6. Integrações Ativas (Garantir que conta apenas as autorizadas)
-        $integrationsCount = \App\Models\Integration::where('company_id', $companyId)
-            ->whereNotNull('access_token')
-            ->count();
-
-        return Inertia::render('Dashboard', [
-            'metrics' => [
-                'sales' => [
-                    'today' => (float)$salesToday,
-                    'yesterday' => (float)$salesYesterday
-                ],
-                'orders' => [
-                    'pending' => $ordersPending,
-                    'ready' => $ordersReady,
-                    'delayed' => $ordersDelayed,
-                ],
-                'inventory' => [
-                    'active' => $productsActive,
-                    'paused' => $productsPaused,
-                    'out_of_stock' => $productsOutOfStock,
-                    'alerts' => $inventoryAlerts,
-                    'total_integrations' => $integrationsCount
-                ],
-                'marketing' => $marketingMetrics
-            ],
-            'user' => [
-                'name' => $user->name,
-                'company' => $user->company
-            ]
+        return Inertia::render('ManagementDashboard', [
+            'sales' => $this->salesSummary($companyId),
+            'kpis' => $kpis,
+            'channel' => $channel,
+            'alertas' => $alertas,
         ]);
+    }
+
+    /** Resumo de vendas a partir dos pedidos importados (resiliente ao schema). */
+    private function salesSummary(int $companyId): array
+    {
+        $empty = ['rev30' => 0, 'rev_today' => 0, 'orders30' => 0, 'ticket' => 0, 'total_pedidos' => 0, 'por_canal' => []];
+
+        try {
+            if (!Schema::hasTable('orders')) return $empty;
+            $cols = Schema::getColumnListing('orders');
+            $has = fn ($c) => in_array($c, $cols, true);
+
+            $totalCol = $has('total_amount') ? 'total_amount' : null;
+            if (!$totalCol) return $empty;
+            $statusCol = $has('status') ? 'status' : null;
+            $channelCol = $has('selling_channel') ? 'selling_channel' : null;
+            $dateCol = $has('created_at') ? 'created_at' : ($has('date_created') ? 'date_created' : null);
+            $hasCompany = $has('company_id');
+
+            $faturado = ['approved', 'paid', 'shipped', 'delivered', 'accredited'];
+            $now = Carbon::now();
+
+            $scope = function () use ($companyId, $hasCompany, $statusCol, $faturado) {
+                $q = DB::table('orders');
+                if ($hasCompany) $q->where('company_id', $companyId);
+                if ($statusCol) $q->whereIn($statusCol, $faturado);
+                return $q;
+            };
+
+            $q30 = $scope();
+            if ($dateCol) $q30->where($dateCol, '>=', $now->copy()->subDays(30));
+            $rev30 = (float) $q30->sum($totalCol);
+
+            $qc = $scope();
+            if ($dateCol) $qc->where($dateCol, '>=', $now->copy()->subDays(30));
+            $orders30 = (int) $qc->count();
+
+            $qt = $scope();
+            if ($dateCol) $qt->where($dateCol, '>=', $now->copy()->startOfDay());
+            $revToday = (float) $qt->sum($totalCol);
+
+            $porCanal = [];
+            if ($channelCol) {
+                $rows = $scope()
+                    ->select(DB::raw("$channelCol as canal"), DB::raw("SUM($totalCol) as total"), DB::raw('COUNT(*) as pedidos'))
+                    ->groupBy($channelCol)->orderByDesc('total')->limit(8)->get();
+                $porCanal = $rows->map(fn ($r) => [
+                    'canal' => $r->canal ?: 'Sem canal',
+                    'total' => (float) $r->total,
+                    'pedidos' => (int) $r->pedidos,
+                ])->all();
+            }
+
+            $totalBase = DB::table('orders');
+            if ($hasCompany) $totalBase->where('company_id', $companyId);
+
+            return [
+                'rev30' => round($rev30, 2),
+                'rev_today' => round($revToday, 2),
+                'orders30' => $orders30,
+                'ticket' => $orders30 > 0 ? round($rev30 / $orders30, 2) : 0,
+                'total_pedidos' => (int) $totalBase->count(),
+                'por_canal' => $porCanal,
+            ];
+        } catch (\Throwable $e) {
+            return $empty;
+        }
     }
 
     public function sync()
