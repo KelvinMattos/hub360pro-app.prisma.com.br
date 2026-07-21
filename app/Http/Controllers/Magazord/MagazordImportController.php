@@ -119,13 +119,19 @@ class MagazordImportController extends Controller
             'file.mimes' => 'Envie o arquivo em formato .csv. Se o Magazord exportou .xls, reexporte como CSV (o .xls do Magazord costuma vir como HTML e não pode ser lido).',
         ]);
 
+        // Arquivos grandes (dezenas de milhares de linhas) podem levar minutos —
+        // remove o limite de tempo/abort para a importação concluir e retornar o resumo.
+        @set_time_limit(0);
+        @ignore_user_abort(true);
+
         $path = $request->file('file')->getRealPath();
         $createMissing = (bool) $request->boolean('create_missing');
 
         // Rejeita o .xls do Magazord que na verdade vem como HTML (erro de export).
         $head = @file_get_contents($path, false, null, 0, 64);
         if ($head !== false && stripos($head, '<html') !== false) {
-            return back()->with('error', 'O arquivo enviado é um HTML (provável erro de exportação do Magazord), não uma planilha. Reexporte o relatório como CSV e tente novamente.');
+            return redirect()->route('magazord.show', ['type' => $type])
+                ->with('error', 'O arquivo enviado é um HTML (provável erro de exportação do Magazord), não uma planilha. Reexporte o relatório como CSV e tente novamente.');
         }
 
         $summary = match ($type) {
@@ -137,7 +143,8 @@ class MagazordImportController extends Controller
             'vendas' => $this->importVendas($this->readRows($path), $createMissing),
         };
 
-        return back()->with('importResult', $summary)
+        return redirect()->route('magazord.show', ['type' => $type])
+            ->with('importResult', $summary)
             ->with('success', $summary['message']);
     }
 
@@ -252,7 +259,7 @@ class MagazordImportController extends Controller
                 $qty = (int) round($this->brNumber($qtyRaw) ?? 0);
 
                 if ($skuToId->has($sku)) {
-                    Product::where('id', $skuToId[$sku])->update(['stock_quantity' => $qty]);
+                    DB::table('products')->where('id', $skuToId[$sku])->update(['stock_quantity' => $qty]);
                     $updated++;
                 } else {
                     $notFound++;
@@ -294,7 +301,7 @@ class MagazordImportController extends Controller
                 if ($cost === null) { $skipped++; continue; }
 
                 if ($skuToId->has($sku)) {
-                    Product::where('id', $skuToId[$sku])->update(['cost_price' => $cost]);
+                    DB::table('products')->where('id', $skuToId[$sku])->update(['cost_price' => $cost]);
                     $updated++;
                 } elseif ($createMissing) {
                     $ativo = mb_strtolower((string) $this->col($row, ['Produto Ativo'])) === 'sim';
@@ -387,7 +394,7 @@ class MagazordImportController extends Controller
                 }
 
                 if ($skuToId->has($sku)) {
-                    Product::where('id', $skuToId[$sku])->update($this->prune($payload));
+                    DB::table('products')->where('id', $skuToId[$sku])->update($this->prune($payload));
                     $updated++;
                 } elseif ($createMissing) {
                     $ativo = mb_strtolower((string) $this->col($row, ['Ativo', 'Produto Ativo'])) !== 'não'
@@ -450,7 +457,7 @@ class MagazordImportController extends Controller
                 if (empty($payload)) { $skipped++; continue; }
 
                 if ($skuToId->has($sku)) {
-                    Product::where('id', $skuToId[$sku])->update($this->prune($payload));
+                    DB::table('products')->where('id', $skuToId[$sku])->update($this->prune($payload));
                     $updated++;
                 } else {
                     $notFound++;
@@ -511,7 +518,7 @@ class MagazordImportController extends Controller
                 if ($skuToId->has($sku)) {
                     $safe = $this->prune($payload);
                     if (!empty($safe)) {
-                        Product::where('id', $skuToId[$sku])->update($safe);
+                        DB::table('products')->where('id', $skuToId[$sku])->update($safe);
                     }
                     $updated++;
                 } elseif ($createMissing && mb_strtolower((string) $this->col($row, ['Tipo Registro'])) !== 'pai') {
