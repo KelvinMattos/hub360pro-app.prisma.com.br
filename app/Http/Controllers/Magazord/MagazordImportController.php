@@ -59,6 +59,16 @@ class MagazordImportController extends Controller
             'columns' => ['Código', 'Produto', 'Marca', 'Custo', 'Estoque', 'Site', 'Shopee', 'Mercado Livre', 'Centauro', 'Via Varejo', 'Magalu', 'Dafiti', 'Amazon', 'Netshoes', 'Ativo'],
             'can_create' => true,
         ],
+        'descontos' => [
+            'title' => 'Importar Produtos com Desconto',
+            'icon' => 'fa-solid fa-percent',
+            'target' => 'products.sale_price (De) + promotional_price (Por)',
+            'key_label' => 'Produto',
+            'value_label' => 'Preço Antigo → venda · Preço Venda → promocional',
+            'description' => 'Modelo "Consulta Dinâmica – Produtos com Desconto". Grava o preço cheio (Preço Antigo/De) em sale_price e o preço praticado (Preço Venda/Por) em promotional_price, cruzando pelo Produto (SKU). Só lista produtos que têm desconto ativo.',
+            'columns' => ['Loja', 'ID Produto', 'Produto', 'Preço Antigo', 'Preço Venda', 'Desconto %', 'Ativo'],
+            'can_create' => false,
+        ],
         'produtos' => [
             'title' => 'Importar Produtos & Datas',
             'icon' => 'fa-solid fa-calendar-day',
@@ -122,6 +132,7 @@ class MagazordImportController extends Controller
             'estoque' => $this->importEstoque($this->readRows($path)),
             'custos' => $this->importCustos($this->readRows($path), $createMissing),
             'precos' => $this->importPrecos($this->readRows($path), $createMissing),
+            'descontos' => $this->importDescontos($this->readRows($path)),
             'produtos' => $this->importProdutos($this->readRows($path), $createMissing),
             'vendas' => $this->importVendas($this->readRows($path), $createMissing),
         };
@@ -372,6 +383,57 @@ class MagazordImportController extends Controller
             'created' => $created,
             'skipped' => $notFound + $skipped,
             'message' => "Preços importados: {$updated} atualizados, {$created} criados, {$notFound} SKUs não encontrados (de {$rows} linhas). Preço de venda, custo e estoque atualizados quando presentes no arquivo.",
+        ];
+    }
+
+    /* ============================================================
+     *  PRODUTOS COM DESCONTO -> products.sale_price (De) + promotional_price (Por)
+     *
+     *  Modelo "Consulta Dinâmica – Produtos com Desconto". Preço Antigo é o
+     *  preço cheio (De) e Preço Venda é o preço praticado (Por).
+     * ============================================================ */
+    private function importDescontos(iterable $records): array
+    {
+        $companyId = Auth::user()->company_id;
+        $skuToId = Product::where('company_id', $companyId)
+            ->whereNotNull('sku')->pluck('id', 'sku');
+
+        $updated = 0; $notFound = 0; $skipped = 0; $rows = 0;
+        DB::beginTransaction();
+        try {
+            foreach ($records as $row) {
+                $rows++;
+                $sku = $this->col($row, ['Produto', 'Código']);
+                if ($sku === null || $sku === '') { $skipped++; continue; }
+
+                $de = $this->brNumber($this->col($row, ['Preço Antigo']));       // preço cheio
+                $por = $this->brNumber($this->col($row, ['Preço Venda', 'Preço'])); // preço praticado
+
+                $payload = [];
+                if ($de !== null && $de > 0) $payload['sale_price'] = $de;
+                if ($por !== null && $por > 0) $payload['promotional_price'] = $por;
+                if (empty($payload)) { $skipped++; continue; }
+
+                if ($skuToId->has($sku)) {
+                    Product::where('id', $skuToId[$sku])->update($payload);
+                    $updated++;
+                } else {
+                    $notFound++;
+                }
+            }
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return $this->fail($e);
+        }
+
+        return [
+            'ok' => true,
+            'rows' => $rows,
+            'updated' => $updated,
+            'created' => 0,
+            'skipped' => $notFound + $skipped,
+            'message' => "Produtos com desconto importados: {$updated} atualizados, {$notFound} SKUs não encontrados (de {$rows} linhas). Preço cheio → venda; preço praticado → promocional.",
         ];
     }
 
