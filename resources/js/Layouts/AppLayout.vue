@@ -155,6 +155,7 @@ const navigation = [
             { label: 'Importar Estoque', route: 'magazord.show', params: { type: 'estoque' }, icon: 'fa-solid fa-boxes-stacked' },
             { label: 'Importar Custos de Produtos', route: 'magazord.show', params: { type: 'custos' }, icon: 'fa-solid fa-money-bill-trend-up' },
             { label: 'Importar Preços de Venda', route: 'magazord.show', params: { type: 'precos' }, icon: 'fa-solid fa-tags' },
+            { label: 'Importar Produtos & Datas', route: 'magazord.show', params: { type: 'produtos' }, icon: 'fa-solid fa-calendar-day' },
             { label: 'Importar Vendas', route: 'magazord.show', params: { type: 'vendas' }, icon: 'fa-solid fa-cart-shopping' },
         ]
     },

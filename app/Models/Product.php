@@ -17,7 +17,8 @@ class Product extends Model
         'cost_price', 'sale_price', 'promotional_price', 'profit_margin',
         'weight', 'height', 'width', 'length',
         'category_id', 'listing_type_id', 'permalink', 'json_data',
-        'video_id', 'shipping_mode', 'free_shipping', 'variations', 'sale_fee'
+        'video_id', 'shipping_mode', 'free_shipping', 'variations', 'sale_fee',
+        'launched_at', 'catalog_updated_at'
     ];
 
     protected $with = ['medias', 'channel_settings'];
@@ -31,6 +32,8 @@ class Product extends Model
         'promotional_price' => 'decimal:2',
         'sale_fee' => 'decimal:2',
         'free_shipping' => 'boolean',
+        'launched_at' => 'date',
+        'catalog_updated_at' => 'datetime',
     ];
 
     protected static function booted()

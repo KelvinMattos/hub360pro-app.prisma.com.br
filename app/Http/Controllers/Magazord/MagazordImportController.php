@@ -59,6 +59,16 @@ class MagazordImportController extends Controller
             'columns' => ['Código', 'Produto', 'Marca', 'Custo', 'Estoque', 'Site', 'Shopee', 'Mercado Livre', 'Centauro', 'Via Varejo', 'Magalu', 'Dafiti', 'Amazon', 'Netshoes', 'Ativo'],
             'can_create' => true,
         ],
+        'produtos' => [
+            'title' => 'Importar Produtos & Datas',
+            'icon' => 'fa-solid fa-calendar-day',
+            'target' => 'products (launched_at, catalog_updated_at, EAN, dimensões)',
+            'key_label' => 'Código',
+            'value_label' => 'Data de Lançamento · Data Atualização',
+            'description' => 'Modelo "Consulta de Derivação do Produto": importa a Data de Lançamento e a Data de Atualização (para calcular o tempo de estoque), além de EAN, marca e dimensões. Cruza pelo Código. Registros "Pai" só são criados como produto se "criar inexistentes" estiver marcado — o padrão cria apenas variações ("Filho").',
+            'columns' => ['Código', 'Produto - Derivação', 'Marca', 'Qtde Estoque', 'EAN', 'Peso (kg)', 'Largura (cm)', 'Altura (cm)', 'Comprimento (cm)', 'Data de Lançamento', 'Data Atualização Produto', 'Ativo'],
+            'can_create' => true,
+        ],
         'vendas' => [
             'title' => 'Importar Vendas',
             'icon' => 'fa-solid fa-cart-shopping',
@@ -112,6 +122,7 @@ class MagazordImportController extends Controller
             'estoque' => $this->importEstoque($this->readRows($path)),
             'custos' => $this->importCustos($this->readRows($path), $createMissing),
             'precos' => $this->importPrecos($this->readRows($path), $createMissing),
+            'produtos' => $this->importProdutos($this->readRows($path), $createMissing),
             'vendas' => $this->importVendas($this->readRows($path), $createMissing),
         };
 
@@ -365,6 +376,78 @@ class MagazordImportController extends Controller
     }
 
     /* ============================================================
+     *  PRODUTOS & DATAS -> products (launched_at, catalog_updated_at, ...)
+     *
+     *  Modelo "Consulta de Derivação do Produto". Grava a Data de Lançamento
+     *  e a Data de Atualização (base do cálculo de tempo de estoque) e
+     *  enriquece EAN, marca e dimensões. Cruza pelo Código.
+     * ============================================================ */
+    private function importProdutos(iterable $records, bool $createMissing): array
+    {
+        $companyId = Auth::user()->company_id;
+        $skuToId = Product::where('company_id', $companyId)
+            ->whereNotNull('sku')->pluck('id', 'sku');
+
+        $updated = 0; $created = 0; $notFound = 0; $skipped = 0; $rows = 0;
+        DB::beginTransaction();
+        try {
+            foreach ($records as $row) {
+                $rows++;
+                $sku = $this->col($row, ['Código']);
+                if ($sku === null || $sku === '') { $skipped++; continue; }
+
+                $launched = $this->parseDate($this->col($row, ['Data de Lançamento']));
+                $catalogUpdated = $this->parseDate($this->col($row, ['Data Atualização Produto']));
+
+                $payload = [];
+                if ($launched !== null) $payload['launched_at'] = $launched;
+                if ($catalogUpdated !== null) $payload['catalog_updated_at'] = $catalogUpdated;
+                $ean = $this->col($row, ['EAN']);
+                if ($ean) $payload['ean'] = $ean;
+                $brand = $this->col($row, ['Marca']);
+                if ($brand) $payload['brand'] = $brand;
+                foreach ([['weight', 'Peso (kg)'], ['width', 'Largura (cm)'], ['height', 'Altura (cm)'], ['length', 'Comprimento (cm)']] as [$field, $header]) {
+                    $v = $this->brNumber($this->col($row, [$header]));
+                    if ($v !== null && $v > 0) $payload[$field] = $v;
+                }
+
+                if ($skuToId->has($sku)) {
+                    if (!empty($payload)) {
+                        Product::where('id', $skuToId[$sku])->update($payload);
+                    }
+                    $updated++;
+                } elseif ($createMissing && mb_strtolower((string) $this->col($row, ['Tipo Registro'])) !== 'pai') {
+                    // cria apenas variações ("Filho"), evitando os códigos "Pai"/OLD_*
+                    $ativo = mb_strtolower((string) $this->col($row, ['Ativo'])) === 'sim';
+                    $p = Product::create(array_merge($payload, [
+                        'company_id' => $companyId,
+                        'sku' => $sku,
+                        'title' => $this->col($row, ['Produto - Derivação', 'Nome da Derivação']) ?: $sku,
+                        'status' => $ativo ? 'active' : 'inactive',
+                    ]));
+                    $skuToId[$sku] = $p->id;
+                    $created++;
+                } else {
+                    $notFound++;
+                }
+            }
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return $this->fail($e);
+        }
+
+        return [
+            'ok' => true,
+            'rows' => $rows,
+            'updated' => $updated,
+            'created' => $created,
+            'skipped' => $notFound + $skipped,
+            'message' => "Produtos & datas importados: {$updated} atualizados, {$created} criados, {$notFound} SKUs não encontrados (de {$rows} linhas). Data de lançamento gravada para calcular o tempo de estoque.",
+        ];
+    }
+
+    /* ============================================================
      *  VENDAS -> orders
      * ============================================================ */
     private function importVendas(iterable $records, bool $createMissing): array
@@ -462,7 +545,9 @@ class MagazordImportController extends Controller
     private function parseDate(?string $value): ?string
     {
         if (!$value) return null;
-        foreach (['d/m/Y H:i:s', 'd/m/Y H:i', 'd/m/Y'] as $fmt) {
+        // O prefixo "!" zera os campos não informados (datas sem hora viram 00:00:00
+        // em vez de herdarem a hora atual).
+        foreach (['!d/m/Y H:i:s', '!d/m/Y H:i', '!d/m/Y'] as $fmt) {
             try {
                 return Carbon::createFromFormat($fmt, trim($value))->toDateTimeString();
             } catch (\Throwable $e) {
