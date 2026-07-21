@@ -39,6 +39,9 @@ Route::middleware(['auth'])->group(function () {
     // Centro de Decisão Gerencial — cockpit de precificação sobre dados reais
     Route::get('/decision', [\App\Http\Controllers\DecisionCenterController::class , 'index'])->name('decision.index');
 
+    // Calculadora de Retorno por Canal (geral — substitui a calculadora só do ML)
+    Route::get('/calculator', [\App\Http\Controllers\ChannelCalculatorController::class , 'index'])->name('calculator.index');
+
     // Financeiro Inteligente (Dashboard CFO & DRE)
     Route::prefix('financial')->name('financial.')->group(function () {
         Route::get('/dashboard', [FinancialDashboardController::class , 'index'])->name('dashboard');
@@ -99,19 +102,20 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/orders/{id}/sync', [OrderController::class , 'syncSingle'])->name('orders.sync_single');
 
         // Inteligência 360
-        Route::get('/meli/war-room', [MeliIntelligenceController::class , 'warRoom'])->name('meli.war_room');
+        // War Room removido — rota mantida como redirect para não quebrar links legados.
+        Route::get('/meli/war-room', fn () => redirect()->route('decision.index'))->name('meli.war_room');
         Route::get('/meli/trends', [MeliIntelligenceController::class, 'trends'])->name('meli.trends');
         Route::get('/meli/market-share', [MeliIntelligenceController::class, 'marketShare'])->name('meli.market_share');
         Route::get('/inventory/planning', [InventoryController::class , 'planning'])->name('inventory.planning');
         Route::get('/inventory/aging', [InventoryController::class , 'aging'])->name('inventory.aging');
-        Route::get('/meli/calculator', [MeliIntelligenceController::class , 'calculator'])->name('meli.calculator');
+        // Calculadora ML antiga -> nova calculadora geral de canais
+        Route::get('/meli/calculator', fn () => redirect()->route('calculator.index'))->name('meli.calculator');
 
         // Relatórios & BI
         Route::get('/reports', [ReportController::class , 'index'])->name('reports.index');
         Route::get('/reports/export', [ReportController::class , 'exportData'])->name('reports.export');
 
         // Busca de Inteligência (Ajax/Inertia)
-        Route::get('/meli/war-room/search', [MeliIntelligenceController::class , 'searchCompetitors'])->name('meli.war_room.search');
         Route::get('/meli/trends/search', [MeliIntelligenceController::class, 'getTrends'])->name('meli.trends.search');
 
         // OAuth & Conexões
