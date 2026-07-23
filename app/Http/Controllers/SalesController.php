@@ -50,7 +50,11 @@ class SalesController extends Controller
             if (!$totalCol) return $empty;
             $statusCol = $has('status') ? 'status' : null;
             $channelCol = $has('selling_channel') ? 'selling_channel' : null;
-            $dateCol = $has('created_at') ? 'created_at' : ($has('date_created') ? 'date_created' : null);
+            // Data real do pedido (Data/Hora do Magazord) — NÃO usar created_at,
+            // que é o timestamp da importação (jogaria tudo no mesmo mês/dia).
+            $dateCol = $has('date_created') ? 'date_created'
+                : ($has('order_date') ? 'order_date'
+                : ($has('created_at') ? 'created_at' : null));
             $keyCol = $has('external_id') ? 'external_id' : ($has('ml_order_id') ? 'ml_order_id' : 'id');
             $nameCol = $has('customer_name') ? 'customer_name' : ($has('buyer_nickname') ? 'buyer_nickname' : null);
             $hasCompany = $has('company_id');
