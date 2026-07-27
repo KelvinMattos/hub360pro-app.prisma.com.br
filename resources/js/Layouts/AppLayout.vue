@@ -106,6 +106,14 @@ const flash = computed(() => page.props.flash || {});
 
 const navigation = [
     {
+        title: 'Monitoramento de Preços',
+        items: [
+            { label: 'Dashboard de Competitividade', route: 'monitoring.dashboard', icon: 'fa-solid fa-satellite-dish' },
+            { label: 'Produtos Monitorados', route: 'monitoring.products', icon: 'fa-solid fa-crosshairs' },
+            { label: 'Importar Preços de Mercado', route: 'monitoring.market.form', icon: 'fa-solid fa-file-arrow-up' },
+        ]
+    },
+    {
         title: 'Decisão & Precificação',
         items: [
             { label: 'Centro de Decisão', route: 'decision.index', icon: 'fa-solid fa-chess-king' },
