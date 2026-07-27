@@ -170,6 +170,13 @@ const navigation = [
         ]
     },
     {
+        title: 'Importações Netshoes',
+        items: [
+            { label: 'Importar Produtos Netshoes', route: 'netshoes.show', params: { type: 'produtos' }, icon: 'fa-solid fa-tags' },
+            { label: 'Importar Estoque Netshoes', route: 'netshoes.show', params: { type: 'estoque' }, icon: 'fa-solid fa-boxes-stacked' },
+        ]
+    },
+    {
         title: 'Sistema',
         items: [
             { label: 'Conexões', route: 'settings.integrations', icon: 'fa-solid fa-plug' },
