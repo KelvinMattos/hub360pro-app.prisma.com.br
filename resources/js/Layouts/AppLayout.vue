@@ -106,6 +106,14 @@ const flash = computed(() => page.props.flash || {});
 
 const navigation = [
     {
+        title: 'Monitoramento de Preços',
+        items: [
+            { label: 'Dashboard de Competitividade', route: 'monitoring.dashboard', icon: 'fa-solid fa-satellite-dish' },
+            { label: 'Produtos Monitorados', route: 'monitoring.products', icon: 'fa-solid fa-crosshairs' },
+            { label: 'Importar Preços de Mercado', route: 'monitoring.market.form', icon: 'fa-solid fa-file-arrow-up' },
+        ]
+    },
+    {
         title: 'Decisão & Precificação',
         items: [
             { label: 'Centro de Decisão', route: 'decision.index', icon: 'fa-solid fa-chess-king' },
@@ -167,6 +175,13 @@ const navigation = [
             { label: 'Importar Produtos com Desconto', route: 'magazord.show', params: { type: 'descontos' }, icon: 'fa-solid fa-percent' },
             { label: 'Importar Produtos & Datas', route: 'magazord.show', params: { type: 'produtos' }, icon: 'fa-solid fa-calendar-day' },
             { label: 'Importar Vendas', route: 'magazord.show', params: { type: 'vendas' }, icon: 'fa-solid fa-cart-shopping' },
+        ]
+    },
+    {
+        title: 'Importações Netshoes',
+        items: [
+            { label: 'Importar Produtos Netshoes', route: 'netshoes.show', params: { type: 'produtos' }, icon: 'fa-solid fa-tags' },
+            { label: 'Importar Estoque Netshoes', route: 'netshoes.show', params: { type: 'estoque' }, icon: 'fa-solid fa-boxes-stacked' },
         ]
     },
     {

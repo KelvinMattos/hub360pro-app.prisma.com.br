@@ -12,6 +12,9 @@ use App\Http\Controllers\LoginController;
 use App\Http\Controllers\Pricing\PricingSimulationController;
 use App\Http\Controllers\Pricing\CalculoPromoController;
 use App\Http\Controllers\Magazord\MagazordImportController;
+use App\Http\Controllers\Netshoes\NetshoesImportController;
+use App\Http\Controllers\Monitoring\MonitoringController;
+use App\Http\Controllers\Monitoring\MarketPriceImportController;
 use App\Http\Controllers\Financial\HealthDashboardController;
 use App\Http\Controllers\Financial\FinancialDashboardController;
 use App\Http\Controllers\ReportController;
@@ -38,6 +41,14 @@ Route::middleware('guest')->group(function () {
 // flood "Session store not set on request" no log.
 Route::get('/imports/magazord/progress/{token}', [MagazordImportController::class, 'progress'])
     ->name('magazord.progress');
+
+// Progresso de importação Netshoes — mesmo padrão (stack web normal, sem CSRF issue).
+Route::get('/imports/netshoes/progress/{token}', [NetshoesImportController::class, 'progress'])
+    ->name('netshoes.progress');
+
+// Progresso de importação de preços de mercado (monitoramento).
+Route::get('/monitoring/market/progress/{token}', [MarketPriceImportController::class, 'progress'])
+    ->name('monitoring.market.progress');
 
 // 3. Sistema Protegido (Middleware Higienizado)
 Route::middleware(['auth'])->group(function () {
@@ -84,6 +95,24 @@ Route::middleware(['auth'])->group(function () {
                 ->whereIn('type', ['estoque', 'custos', 'precos', 'descontos', 'produtos', 'vendas'])->name('show');
             Route::post('/{type}', [MagazordImportController::class , 'import'])
                 ->whereIn('type', ['estoque', 'custos', 'precos', 'descontos', 'produtos', 'vendas'])->name('import');
+        });
+
+        // Importações Netshoes — só canal (netshoes_*), cruza pelo sku do produto
+        Route::prefix('imports/netshoes')->name('netshoes.')->group(function () {
+            Route::get('/{type}', [NetshoesImportController::class, 'show'])
+                ->whereIn('type', ['produtos', 'estoque'])->name('show');
+            Route::post('/{type}', [NetshoesImportController::class, 'import'])
+                ->whereIn('type', ['produtos', 'estoque'])->name('import');
+        });
+
+        // Monitoramento de Preços (competitividade estilo Hooklab)
+        Route::prefix('monitoring')->name('monitoring.')->group(function () {
+            Route::get('/', [MonitoringController::class, 'dashboard'])->name('dashboard');
+            Route::get('/produtos', [MonitoringController::class, 'products'])->name('products');
+            Route::post('/produtos/{product}/mercado', [MonitoringController::class, 'setMarket'])
+                ->whereNumber('product')->name('market.set');
+            Route::get('/mercado/importar', [MarketPriceImportController::class, 'form'])->name('market.form');
+            Route::post('/mercado/importar', [MarketPriceImportController::class, 'import'])->name('market.import');
         });
 
         // Hub 360 PRO: Monitor de Integrações
