@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Monitoring;
 
 use App\Http\Controllers\Controller;
 use App\Services\MarketMonitorService;
+use App\Services\MarketOptimizerService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -18,8 +19,10 @@ use Inertia\Inertia;
  */
 class MonitoringController extends Controller
 {
-    public function __construct(private MarketMonitorService $monitor)
-    {
+    public function __construct(
+        private MarketMonitorService $monitor,
+        private MarketOptimizerService $optimizer
+    ) {
     }
 
     private function companyId(): ?int
@@ -38,7 +41,7 @@ class MonitoringController extends Controller
         $days = in_array($days, [1, 7, 30, 90, 180], true) ? $days : 30;
 
         return Inertia::render('Monitoring/Dashboard', array_merge(
-            ['days' => $days],
+            ['days' => $days, 'buybox' => $this->optimizer->buybox($companyId)],
             $this->monitor->summary($companyId, $days)
         ));
     }

@@ -15,6 +15,9 @@ use App\Http\Controllers\Magazord\MagazordImportController;
 use App\Http\Controllers\Netshoes\NetshoesImportController;
 use App\Http\Controllers\Monitoring\MonitoringController;
 use App\Http\Controllers\Monitoring\MarketPriceImportController;
+use App\Http\Controllers\Monitoring\OptimizeController;
+use App\Http\Controllers\Monitoring\MonitoringReportController;
+use App\Http\Controllers\Monitoring\ScraperController;
 use App\Http\Controllers\Financial\HealthDashboardController;
 use App\Http\Controllers\Financial\FinancialDashboardController;
 use App\Http\Controllers\ReportController;
@@ -49,6 +52,10 @@ Route::get('/imports/netshoes/progress/{token}', [NetshoesImportController::clas
 // Progresso de importação de preços de mercado (monitoramento).
 Route::get('/monitoring/market/progress/{token}', [MarketPriceImportController::class, 'progress'])
     ->name('monitoring.market.progress');
+
+// Progresso da coleta de Buy Box (scraper Netshoes).
+Route::get('/monitoring/scraper/progress/{token}', [ScraperController::class, 'progress'])
+    ->name('monitoring.scraper.progress');
 
 // 3. Sistema Protegido (Middleware Higienizado)
 Route::middleware(['auth'])->group(function () {
@@ -113,6 +120,21 @@ Route::middleware(['auth'])->group(function () {
                 ->whereNumber('product')->name('market.set');
             Route::get('/mercado/importar', [MarketPriceImportController::class, 'form'])->name('market.form');
             Route::post('/mercado/importar', [MarketPriceImportController::class, 'import'])->name('market.import');
+
+            // Otimizar
+            Route::get('/otimizar', [OptimizeController::class, 'index'])->name('optimize');
+            Route::post('/otimizar/{product}/aplicar', [OptimizeController::class, 'apply'])
+                ->whereNumber('product')->name('optimize.apply');
+
+            // Relatório de competitividade / Buy Box
+            Route::get('/relatorio', [MonitoringReportController::class, 'index'])->name('report');
+            Route::get('/relatorio/exportar', [MonitoringReportController::class, 'export'])->name('report.export');
+
+            // Coleta de Buy Box (scraper Netshoes)
+            Route::get('/scraper', [ScraperController::class, 'index'])->name('scraper');
+            Route::post('/scraper/config', [ScraperController::class, 'saveConfig'])->name('scraper.config');
+            Route::post('/scraper/testar', [ScraperController::class, 'test'])->name('scraper.test');
+            Route::post('/scraper/rodar', [ScraperController::class, 'run'])->name('scraper.run');
         });
 
         // Hub 360 PRO: Monitor de Integrações

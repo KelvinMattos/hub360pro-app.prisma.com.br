@@ -110,6 +110,9 @@ const navigation = [
         items: [
             { label: 'Dashboard de Competitividade', route: 'monitoring.dashboard', icon: 'fa-solid fa-satellite-dish' },
             { label: 'Produtos Monitorados', route: 'monitoring.products', icon: 'fa-solid fa-crosshairs' },
+            { label: 'Otimizar Preços', route: 'monitoring.optimize', icon: 'fa-solid fa-wand-magic-sparkles' },
+            { label: 'Relatório de Buy Box', route: 'monitoring.report', icon: 'fa-solid fa-chart-column' },
+            { label: 'Coleta Buy Box (Netshoes)', route: 'monitoring.scraper', icon: 'fa-solid fa-robot' },
             { label: 'Importar Preços de Mercado', route: 'monitoring.market.form', icon: 'fa-solid fa-file-arrow-up' },
         ]
     },
