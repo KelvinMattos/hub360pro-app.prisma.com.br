@@ -74,6 +74,7 @@ class ScraperController extends Controller
         }
 
         $data = $request->validate([
+            'scraper_enabled' => ['nullable', 'boolean'],
             'netshoes_seller_name' => ['nullable', 'string', 'max:120'],
             'search_url' => ['nullable', 'string', 'max:400'],
             'timeout' => ['nullable', 'integer', 'min:5', 'max:60'],
@@ -141,24 +142,39 @@ class ScraperController extends Controller
             try {
                 Cache::store('file')->put($key, array_merge([
                     'status' => $status,
-                    'done' => $stats['ok'] + $stats['fail'],
-                    'total' => $stats['total'],
-                    'ok' => $stats['ok'],
-                    'fail' => $stats['fail'],
-                    'winning' => $stats['winning'],
-                    'losing' => $stats['losing'],
+                    'done' => ($stats['ok'] ?? 0) + ($stats['fail'] ?? 0),
+                    'total' => $stats['total'] ?? 0,
+                    'ok' => $stats['ok'] ?? 0,
+                    'fail' => $stats['fail'] ?? 0,
+                    'blocked' => $stats['blocked'] ?? 0,
+                    'winning' => $stats['winning'] ?? 0,
+                    'losing' => $stats['losing'] ?? 0,
                 ], $extra), now()->addMinutes(60));
             } catch (\Throwable $e) {
             }
         };
 
-        $write('processing', ['total' => $total, 'ok' => 0, 'fail' => 0, 'winning' => 0, 'losing' => 0]);
+        $write('processing', ['total' => $total, 'ok' => 0, 'fail' => 0, 'blocked' => 0, 'winning' => 0, 'losing' => 0]);
 
         $stats = $this->sync->run(
             $companyId,
             ['batch_limit' => $limit, 'force' => $force],
             fn ($s) => $write('processing', $s)
         );
+
+        // Rodada abortada (desligado / sem SKU / bloqueio) é FALHA explícita,
+        // nunca "concluída com sucesso".
+        if (!empty($stats['aborted'])) {
+            $summary = [
+                'ok' => false,
+                'rows' => $stats['total'], 'updated' => $stats['ok'], 'created' => 0,
+                'skipped' => $stats['fail'],
+                'message' => $stats['reason'] ?: 'Coleta interrompida.',
+            ];
+            $write('done', $stats, ['result' => $summary]);
+            return redirect()->route('monitoring.scraper')
+                ->with('importResult', $summary)->with('error', $summary['message']);
+        }
 
         $summary = [
             'ok' => true,
@@ -167,6 +183,7 @@ class ScraperController extends Controller
             'created' => 0,
             'skipped' => $stats['fail'],
             'message' => "Coleta concluída: {$stats['ok']} produtos atualizados, {$stats['fail']} falhas"
+                . ($stats['blocked'] > 0 ? " ({$stats['blocked']} bloqueadas pelo site)" : '')
                 . ($stats['winning'] + $stats['losing'] > 0
                     ? " · Buy Box: {$stats['winning']} ganhando, {$stats['losing']} perdendo." : '.'),
         ];

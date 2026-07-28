@@ -16,9 +16,45 @@
                 <i class="fa-solid fa-circle-exclamation mr-2"></i>{{ flash.error }}
             </div>
 
+            <!-- Aviso de bloqueio -->
+            <div class="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 mb-6">
+                <div class="flex gap-3">
+                    <i class="fa-solid fa-shield-halved text-amber-500 text-xl mt-0.5"></i>
+                    <div class="text-sm">
+                        <div class="font-bold text-slate-800 mb-1">A Netshoes bloqueia coleta por servidor</div>
+                        <p class="text-slate-600">
+                            As requisições do servidor recebem <b>HTTP 403 (Access Denied)</b> na borda do site. Por isso esta
+                            coleta vem <b>desativada</b> e não tentamos contornar o bloqueio.
+                        </p>
+                        <p class="text-slate-600 mt-2">
+                            Use a
+                            <Link :href="route('monitoring.market.form')" class="text-blue-600 font-semibold">importação de preços de mercado</Link>
+                            com o relatório de Buy Box do Seller Center (ou o export do Hooklab). Esta tela serve para
+                            <b>diagnóstico</b> e ficará pronta caso a coleta autorizada seja liberada.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aviso: sem SKU Netshoes -->
+            <div v-if="!stats.elegiveis" class="bg-red-50 border-2 border-red-300 rounded-2xl p-5 mb-6">
+                <div class="flex gap-3">
+                    <i class="fa-solid fa-circle-exclamation text-red-500 text-xl mt-0.5"></i>
+                    <div class="text-sm">
+                        <div class="font-bold text-slate-800 mb-1">Nenhum produto tem SKU Netshoes</div>
+                        <p class="text-slate-600">
+                            Sem isso não há o que coletar nem reprecificar. Rode primeiro a
+                            <Link :href="route('netshoes.show', { type: 'produtos' })" class="text-blue-600 font-semibold">importação de Produtos Netshoes</Link>
+                            (export "Portal"), que preenche o <code class="k">netshoes_sku</code>.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Status -->
             <div class="grid grid-cols-2 gap-4 mb-6">
-                <div class="kpi"><div class="kpi-l">Produtos com SKU Netshoes</div><div class="kpi-v">{{ n(stats.elegiveis) }}</div></div>
+                <div class="kpi"><div class="kpi-l">Produtos com SKU Netshoes</div>
+                    <div class="kpi-v" :class="stats.elegiveis ? '' : 'text-red-500'">{{ n(stats.elegiveis) }}</div></div>
                 <div class="kpi"><div class="kpi-l">Já coletados</div><div class="kpi-v text-emerald-600">{{ n(stats.coletados) }}</div></div>
             </div>
 
@@ -41,9 +77,11 @@
                         {{ testResult.ok ? 'Capturado com sucesso' : 'Não foi possível capturar' }}
                     </div>
                     <dl class="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        <div><dt class="dt">Preço</dt><dd class="dd">{{ testResult.price ? money(testResult.price) : '—' }}</dd></div>
+                        <div><dt class="dt">Situação</dt><dd class="dd"><span class="font-mono text-xs">{{ testResult.status || '—' }}</span></dd></div>
+                        <div><dt class="dt">Preço do anúncio</dt><dd class="dd">{{ testResult.price ? money(testResult.price) : '—' }}</dd></div>
+                        <div><dt class="dt">Preço PIX <span class="font-normal normal-case">(não é mercado)</span></dt><dd class="dd text-slate-400">{{ testResult.pix_price ? money(testResult.pix_price) : '—' }}</dd></div>
                         <div><dt class="dt">Loja vencedora</dt><dd class="dd">{{ testResult.seller || '—' }}</dd></div>
-                        <div><dt class="dt">Ofertas</dt><dd class="dd">{{ testResult.offers ?? '—' }}</dd></div>
+                        <div><dt class="dt">offerCount <span class="font-normal normal-case">(faixas, não sellers)</span></dt><dd class="dd">{{ testResult.offers ?? '—' }}</dd></div>
                         <div><dt class="dt">Estamos ganhando?</dt>
                             <dd class="dd">
                                 <span v-if="testResult.buybox_winner === true" class="text-emerald-600 font-bold">Sim</span>
@@ -73,6 +111,13 @@
                 <h2 class="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-1">2. Configuração</h2>
                 <p class="text-sm text-slate-500 mb-4">O nome da loja é o que define se <b>nós</b> estamos ganhando a Buy Box.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2 border-b border-slate-100 pb-4 mb-1">
+                        <label class="flex items-center gap-2 text-sm font-bold text-slate-800">
+                            <input type="checkbox" v-model="form.scraper_enabled" class="accent-amber-500">
+                            Ativar coleta direta do site
+                            <span class="text-xs font-normal text-slate-400">(bloqueada hoje — deixe desligado)</span>
+                        </label>
+                    </div>
                     <div class="md:col-span-2">
                         <label class="lb">Nome da nossa loja na Netshoes</label>
                         <input v-model="form.netshoes_seller_name" type="text" placeholder="Ex.: Sportime" class="inp">
@@ -99,7 +144,7 @@
                     Estimativa: ~{{ eta }}.
                 </p>
                 <div class="flex flex-wrap items-center gap-3">
-                    <button @click="runBatch" :disabled="busy" class="btn-primary disabled:opacity-40">
+                    <button @click="runBatch" :disabled="busy || !form.scraper_enabled || !stats.elegiveis" class="btn-primary disabled:opacity-40 disabled:cursor-not-allowed">
                         <i class="fa-solid fa-play mr-2"></i>{{ busy ? 'Coletando…' : 'Coletar agora' }}
                     </button>
                     <label class="flex items-center gap-2 text-sm text-slate-600">
@@ -154,7 +199,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useForm, usePage, router } from '@inertiajs/vue3';
+import { useForm, usePage, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
 const props = defineProps({
@@ -167,6 +212,7 @@ const page = usePage();
 const flash = computed(() => page.props.flash || {});
 
 const form = useForm({
+    scraper_enabled: !!props.config.scraper_enabled,
     netshoes_seller_name: props.config.netshoes_seller_name || '',
     search_url: props.config.search_url || '',
     timeout: props.config.timeout ?? 20,

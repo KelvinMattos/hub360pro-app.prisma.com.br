@@ -284,11 +284,13 @@ class MarketOptimizerService
     private function competSql(): string
     {
         $eff = $this->effSql();
-        $off = $this->has('market_offers_count') ? 'COALESCE(market_offers_count, 0)' : '0';
+        // NÃO usamos offerCount: no HTML da Netshoes ele conta FAIXAS DE PREÇO
+        // (à vista/parcelado), não número de sellers. A classificação usa
+        // apenas a distância do nosso preço para o preço de mercado.
         return "CASE
             WHEN market_price IS NULL OR market_price = 0 THEN 'desconhecida'
-            WHEN $off >= 5 OR ($eff - market_price) / market_price * 100 > 10 THEN 'alta'
-            WHEN $off BETWEEN 2 AND 4 OR ($eff - market_price) / market_price * 100 > 2 THEN 'media'
+            WHEN ($eff - market_price) / market_price * 100 > 10 THEN 'alta'
+            WHEN ($eff - market_price) / market_price * 100 > 2 THEN 'media'
             ELSE 'normal'
         END";
     }

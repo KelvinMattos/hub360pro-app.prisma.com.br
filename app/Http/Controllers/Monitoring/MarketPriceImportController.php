@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Monitoring;
 
 use App\Http\Controllers\Controller;
+use App\Services\Netshoes\BuyBoxSyncService;
+use App\Services\Netshoes\NetshoesBuyBoxScraper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -22,13 +24,87 @@ use OpenSpout\Reader\XLSX\Reader as XlsxReader;
  */
 class MarketPriceImportController extends Controller
 {
+    /**
+     * Aliases de coluna aceitos. Cobre o relatório de Buy Box do Seller Center,
+     * o export do Hooklab e planilhas próprias — sem exigir um formato único.
+     */
+    public const COL_SKU = [
+        'SKU', 'Sku', 'sku', 'Código', 'Codigo', 'Código do Produto', 'Referência', 'Referencia',
+        'SKU Netshoes', 'Sku Netshoes', 'Sku Seller', 'SKU Seller', 'ID Sku', 'Id Sku', 'SKU Vendedor',
+    ];
+    public const COL_PRICE = [
+        'Preço Buy Box', 'Preco Buy Box', 'Buy Box', 'Preço Mercado', 'Preco Mercado',
+        'Preço de Mercado', 'Preço Concorrente', 'Preco Concorrente', 'Preço Vencedor',
+        'Preço Ganhador', 'Menor Preço', 'Preço', 'Preco', 'Preço Por', 'price',
+    ];
+    public const COL_SELLER = [
+        'Vendedor Buy Box', 'Loja Vencedora', 'Seller Buy Box', 'Vendedor', 'Seller',
+        'Ganhador', 'Loja', 'Lojista', 'seller',
+    ];
+    public const COL_URL = ['Link', 'URL', 'Url', 'Link do Anúncio', 'Anúncio', 'Permalink'];
+    public const COL_WINNER = ['Ganhando', 'Ganhando Buy Box', 'Buy Box Ganha', 'Status', 'Situação', 'Situacao'];
+
     private ?string $progressKey = null;
     private int $progTotal = 0;
     private int $progDone = 0;
 
+    public function __construct(private BuyBoxSyncService $sync)
+    {
+    }
+
     public function form()
     {
-        return Inertia::render('Monitoring/MarketImport');
+        return Inertia::render('Monitoring/MarketImport', [
+            'seller_name' => $this->sync->config(Auth::user()?->company_id)['netshoes_seller_name'] ?? '',
+        ]);
+    }
+
+    /**
+     * Coluna explícita de "estamos ganhando?" (quando o relatório traz).
+     * Retorna null quando não há informação — nunca chuta.
+     */
+    private function explicitWinner(array $row): ?bool
+    {
+        $v = $this->col($row, self::COL_WINNER);
+        if ($v === null || $v === '') {
+            return null;
+        }
+        $n = mb_strtolower(trim($v));
+        if (in_array($n, ['sim', 'yes', 'true', '1', 'ganhando', 'vencedor', 'vendendo', 'ganha'], true)) {
+            return true;
+        }
+        if (in_array($n, ['nao', 'não', 'no', 'false', '0', 'perdendo', 'perdeu', 'perde'], true)) {
+            return false;
+        }
+        return null;
+    }
+
+    /** Registra a foto no histórico (alimenta evolução e otimizações). */
+    private function snapshot(int $companyId, int $productId, float $price, ?string $seller, ?bool $winner): void
+    {
+        if (!Schema::hasTable('market_snapshots')) {
+            return;
+        }
+        try {
+            $our = DB::table('products')->where('id', $productId)
+                ->selectRaw('COALESCE(NULLIF(promotional_price,0), NULLIF(sale_price,0), NULLIF(price,0), 0) as p')
+                ->value('p');
+
+            DB::table('market_snapshots')->insert([
+                'company_id' => $companyId,
+                'product_id' => $productId,
+                'our_price' => $our,
+                'market_price' => $price,
+                'market_seller' => $seller,
+                'buybox_winner' => $winner,
+                'source' => 'import',
+                'captured_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // best-effort
+        }
     }
 
     public function progress(string $token)
@@ -72,7 +148,12 @@ class MarketPriceImportController extends Controller
             ? (clone $base)->whereNotNull('netshoes_sku')->pluck('id', 'netshoes_sku')
             : collect();
 
-        $rows = 0; $updated = 0; $notFound = 0; $skipped = 0;
+        // Nome da NOSSA loja: define quem está ganhando a Buy Box.
+        $ourSeller = NetshoesBuyBoxScraper::normalizeSeller(
+            $this->sync->config($companyId)['netshoes_seller_name'] ?? ''
+        );
+
+        $rows = 0; $updated = 0; $notFound = 0; $skipped = 0; $winning = 0; $losing = 0;
         $rowsGen = $isXlsx ? $this->readXlsx($path) : $this->readCsv($path);
 
         DB::beginTransaction();
@@ -80,23 +161,36 @@ class MarketPriceImportController extends Controller
             foreach ($rowsGen as $row) {
                 $rows++; $this->tick();
 
-                $sku = $this->col($row, ['SKU', 'Sku', 'Código', 'Codigo', 'SKU Netshoes', 'Sku Netshoes', 'Sku Seller', 'ID Sku']);
+                $sku = $this->col($row, self::COL_SKU);
                 if ($sku === null || $sku === '') { $skipped++; continue; }
 
                 $id = $skuMap[$sku] ?? $nshMap[$sku] ?? null;
                 if ($id === null) { $notFound++; continue; }
 
-                $price = $this->num($this->col($row, ['Preço Mercado', 'Preco Mercado', 'Preço Concorrente', 'Preco Concorrente', 'Buy Box', 'Menor Preço', 'Preço', 'Preco', 'Preço Por']));
+                $price = $this->num($this->col($row, self::COL_PRICE));
                 if ($price === null) { $skipped++; continue; }
+
+                $seller = $this->col($row, self::COL_SELLER);
+
+                // Ganhando a Buy Box? 1) coluna explícita; 2) comparação de loja.
+                $winner = $this->explicitWinner($row);
+                if ($winner === null && $ourSeller !== '' && $seller) {
+                    $winner = NetshoesBuyBoxScraper::normalizeSeller($seller) === $ourSeller;
+                }
+                if ($winner === true) { $winning++; } elseif ($winner === false) { $losing++; }
 
                 $payload = $this->prune([
                     'market_price' => $price,
-                    'market_seller' => $this->col($row, ['Vendedor', 'Seller', 'Ganhador', 'Loja']),
+                    'market_seller' => $seller,
+                    'market_url' => $this->col($row, self::COL_URL),
+                    'buybox_winner' => $winner,
                     'market_source' => 'import',
                     'market_checked_at' => now(),
+                    'market_error' => null,
                 ]);
 
                 DB::table('products')->where('id', $id)->update($payload);
+                $this->snapshot($companyId, $id, $price, $seller, $winner);
                 $updated++;
             }
             DB::commit();
@@ -116,7 +210,8 @@ class MarketPriceImportController extends Controller
             'updated' => $updated,
             'created' => 0,
             'skipped' => $notFound + $skipped,
-            'message' => "Preços de mercado: {$updated} atualizados, {$notFound} SKUs não encontrados (de {$rows} linhas).",
+            'message' => "Preços de mercado: {$updated} atualizados, {$notFound} SKUs não encontrados (de {$rows} linhas)."
+                . (($winning + $losing) > 0 ? " Buy Box: {$winning} ganhando, {$losing} perdendo." : ''),
         ];
         $this->writeProgress('done', ['result' => $summary]);
 
