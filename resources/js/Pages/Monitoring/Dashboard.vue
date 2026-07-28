@@ -31,6 +31,25 @@
             </div>
 
             <template v-else>
+                <!-- Buy Box -->
+                <div class="grid grid-cols-1 xl:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-gradient-to-br from-slate-900 to-slate-700 text-white rounded-2xl p-6 shadow-sm">
+                        <div class="text-[11px] font-bold uppercase tracking-wide text-white/60">Share de Buy Box</div>
+                        <div class="text-5xl font-extrabold mt-1 font-mono">{{ buybox.share }}<span class="text-2xl">%</span></div>
+                        <div class="text-xs text-white/60 mt-1">de {{ n(buybox.total) }} produtos com dados</div>
+                        <div class="mt-4 h-2 bg-white/20 rounded-full overflow-hidden">
+                            <div class="h-full bg-emerald-400 rounded-full" :style="{ width: buybox.share + '%' }"></div>
+                        </div>
+                    </div>
+                    <div class="kpi flex flex-col justify-center"><div class="kpi-l">Ganhando Buy Box</div><div class="kpi-v text-emerald-600">{{ n(buybox.ganhando) }}</div></div>
+                    <div class="kpi flex flex-col justify-center"><div class="kpi-l">Perdendo Buy Box</div><div class="kpi-v text-red-600">{{ n(buybox.perdendo) }}</div></div>
+                    <div class="kpi flex flex-col justify-center">
+                        <div class="kpi-l">Sem coleta</div>
+                        <div class="kpi-v text-slate-400">{{ n(buybox.sem_info) }}</div>
+                        <Link :href="route('monitoring.scraper')" class="text-xs font-semibold text-blue-600 hover:text-blue-700 mt-1">Coletar agora →</Link>
+                    </div>
+                </div>
+
                 <!-- KPIs -->
                 <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
                     <div class="kpi"><div class="kpi-l">Monitorados</div><div class="kpi-v">{{ n(kpis.monitorados) }}</div></div>
@@ -151,6 +170,7 @@ const props = defineProps({
     distribuicao: { type: Array, default: () => [] },
     por_canal: { type: Array, default: () => [] },
     evolucao: { type: Array, default: () => [] },
+    buybox: { type: Object, default: () => ({ ganhando: 0, perdendo: 0, sem_info: 0, total: 0, share: 0 }) },
     has_data: { type: Boolean, default: false },
 });
 
