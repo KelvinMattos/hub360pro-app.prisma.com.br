@@ -18,6 +18,7 @@ use App\Http\Controllers\Monitoring\MarketPriceImportController;
 use App\Http\Controllers\Monitoring\OptimizeController;
 use App\Http\Controllers\Monitoring\MonitoringReportController;
 use App\Http\Controllers\Monitoring\ScraperController;
+use App\Http\Controllers\Monitoring\RepricingController;
 use App\Http\Controllers\Financial\HealthDashboardController;
 use App\Http\Controllers\Financial\FinancialDashboardController;
 use App\Http\Controllers\ReportController;
@@ -135,6 +136,14 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/scraper/config', [ScraperController::class, 'saveConfig'])->name('scraper.config');
             Route::post('/scraper/testar', [ScraperController::class, 'test'])->name('scraper.test');
             Route::post('/scraper/rodar', [ScraperController::class, 'run'])->name('scraper.run');
+
+            // Repricing automático (desligado por padrão, dry-run por padrão)
+            Route::get('/repricing', [RepricingController::class, 'index'])->name('repricing');
+            Route::post('/repricing/config', [RepricingController::class, 'saveConfig'])->name('repricing.config');
+            Route::post('/repricing/marca', [RepricingController::class, 'saveBrandMargin'])->name('repricing.brand');
+            Route::post('/repricing/aplicar', [RepricingController::class, 'apply'])->name('repricing.apply');
+            Route::post('/repricing/{batch}/desfazer', [RepricingController::class, 'rollback'])
+                ->whereNumber('batch')->name('repricing.rollback');
         });
 
         // Hub 360 PRO: Monitor de Integrações

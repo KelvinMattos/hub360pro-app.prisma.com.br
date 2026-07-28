@@ -38,12 +38,18 @@ class ScrapeNetshoesBuyBox extends Command
             return self::SUCCESS;
         }
 
-        $grand = ['total' => 0, 'ok' => 0, 'fail' => 0, 'winning' => 0, 'losing' => 0];
+        $grand = ['total' => 0, 'ok' => 0, 'fail' => 0, 'blocked' => 0, 'winning' => 0, 'losing' => 0];
 
         foreach ($companies as $companyId) {
             $opts = ['force' => (bool) $this->option('force')];
             if ($this->option('limit')) {
                 $opts['batch_limit'] = (int) $this->option('limit');
+            }
+
+            if ($sync->eligibleCount($companyId) === 0) {
+                $this->warn("Empresa {$companyId}: NENHUM produto tem SKU Netshoes preenchido. "
+                    . 'Rode antes a importação "Produtos Netshoes" (export Portal). Pulando.');
+                continue;
             }
 
             $this->info("Empresa {$companyId}: iniciando coleta…");
@@ -64,8 +70,12 @@ class ScrapeNetshoesBuyBox extends Command
                 $this->newLine();
             }
 
-            foreach ($grand as $k => $_) {
-                $grand[$k] += $stats[$k] ?? 0;
+            if (!empty($stats['aborted'])) {
+                $this->warn('  ! ' . $stats['reason']);
+            }
+
+            foreach (array_keys($grand) as $k) {
+                $grand[$k] += (int) ($stats[$k] ?? 0);
             }
 
             $this->line("  → {$stats['ok']} ok, {$stats['fail']} falhas, "
@@ -73,6 +83,11 @@ class ScrapeNetshoesBuyBox extends Command
         }
 
         $this->newLine();
+        if ($grand['blocked'] > 0) {
+            $this->warn("Atenção: {$grand['blocked']} requisições foram BLOQUEADAS pelo site (HTTP 403). "
+                . 'Use a importação de preços de mercado (relatório do Seller Center).');
+        }
+
         $this->info("Total: {$grand['ok']} coletados, {$grand['fail']} falhas, "
             . "{$grand['winning']} ganhando / {$grand['losing']} perdendo a Buy Box.");
 

@@ -3,25 +3,35 @@
 namespace App\Services\Netshoes;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Orquestra a coleta de Buy Box: lê a config da empresa, percorre os produtos
- * com netshoes_sku, chama o scraper com pausa entre requisições e persiste o
- * resultado (produto + snapshot histórico).
+ * Orquestra a coleta de Buy Box.
  *
- * Determina `buybox_winner` comparando a loja vencedora com o nome da NOSSA
- * loja na Netshoes (configurável).
+ * ⚠️ DESLIGADO POR PADRÃO: a Netshoes bloqueia requisições server-side (403
+ * Akamai). Enquanto não houver canal autorizado (API de seller ou relatório do
+ * Seller Center), a fonte de preço de mercado é a importação de planilha.
+ *
+ * Garantias desta camada:
+ *  - NUNCA grava preço/market_source quando a resposta não for 200 + preço
+ *    extraído. Falha vira `market_error` explícito, não silêncio.
+ *  - Circuit breaker: se o site responder "bloqueado" seguidamente, aborta a
+ *    rodada em vez de insistir centenas de vezes.
  */
 class BuyBoxSyncService
 {
+    /** Após tantos bloqueios seguidos, desiste da rodada. */
+    private const BLOCK_STREAK_ABORT = 5;
+
     public const DEFAULT_CONFIG = [
-        'netshoes_seller_name' => '',   // nome da nossa loja na Netshoes (ex.: "Sportime")
+        'scraper_enabled' => false,     // coleta direta do site (bloqueada hoje)
+        'netshoes_seller_name' => '',   // nome da NOSSA loja (define o buybox_winner)
         'search_url' => NetshoesBuyBoxScraper::DEFAULTS['search_url'],
         'timeout' => 20,
         'delay_ms' => 1500,
-        'batch_limit' => 200,           // produtos por rodada
-        'recheck_hours' => 12,          // não recoletar antes disso
+        'batch_limit' => 200,
+        'recheck_hours' => 12,
     ];
 
     public function __construct(private NetshoesBuyBoxScraper $scraper)
@@ -58,7 +68,19 @@ class BuyBoxSyncService
 
     /* ------------------------------ coleta ------------------------------ */
 
-    /** Produtos elegíveis (com SKU Netshoes), priorizando os mais desatualizados. */
+    /** Quantos produtos têm SKU Netshoes (0 = nada a coletar). */
+    public function eligibleCount(int $companyId): int
+    {
+        if (!Schema::hasColumn('products', 'netshoes_sku')) {
+            return 0;
+        }
+        $q = DB::table('products')->whereNotNull('netshoes_sku')->where('netshoes_sku', '!=', '');
+        if (Schema::hasColumn('products', 'company_id')) {
+            $q->where('company_id', $companyId);
+        }
+        return (int) $q->count();
+    }
+
     public function pending(int $companyId, int $limit, int $recheckHours, bool $onlyStale = true)
     {
         if (!Schema::hasColumn('products', 'netshoes_sku')) {
@@ -85,15 +107,32 @@ class BuyBoxSyncService
     }
 
     /**
-     * Executa uma rodada de coleta.
+     * Executa uma rodada.
      *
-     * @param callable|null $onTick  chamado a cada produto (para barra de progresso)
+     * @return array{total:int,ok:int,fail:int,blocked:int,winning:int,losing:int,aborted:bool,reason:?string}
      */
     public function run(int $companyId, array $opts = [], ?callable $onTick = null): array
     {
         $cfg = array_merge($this->config($companyId), array_filter($opts, fn ($v) => $v !== null && $v !== ''));
-        $ourSeller = NetshoesBuyBoxScraper::normalizeSeller($cfg['netshoes_seller_name'] ?? '');
+        $stats = ['total' => 0, 'ok' => 0, 'fail' => 0, 'blocked' => 0,
+                  'winning' => 0, 'losing' => 0, 'aborted' => false, 'reason' => null];
 
+        // Trava de segurança: coleta direta desligada por padrão.
+        if (!($cfg['scraper_enabled'] ?? false) && !($opts['allow_disabled'] ?? false)) {
+            $stats['aborted'] = true;
+            $stats['reason'] = 'A coleta direta do site está desativada (a Netshoes bloqueia requisições de servidor). '
+                . 'Use a importação de preços de mercado.';
+            return $stats;
+        }
+
+        if ($this->eligibleCount($companyId) === 0) {
+            $stats['aborted'] = true;
+            $stats['reason'] = 'Nenhum produto tem SKU Netshoes preenchido. '
+                . 'Rode antes a importação "Produtos Netshoes" (export Portal).';
+            return $stats;
+        }
+
+        $ourSeller = NetshoesBuyBoxScraper::normalizeSeller($cfg['netshoes_seller_name'] ?? '');
         $items = $this->pending(
             $companyId,
             (int) ($cfg['batch_limit'] ?? 200),
@@ -101,13 +140,14 @@ class BuyBoxSyncService
             !($opts['force'] ?? false)
         );
 
-        $stats = ['total' => $items->count(), 'ok' => 0, 'fail' => 0, 'winning' => 0, 'losing' => 0];
+        $stats['total'] = $items->count();
         $delay = max(0, (int) ($cfg['delay_ms'] ?? 1500)) * 1000;
         $first = true;
+        $blockStreak = 0;
 
         foreach ($items as $item) {
             if (!$first && $delay > 0) {
-                usleep($delay); // coleta educada: intervalo entre requisições
+                usleep($delay);
             }
             $first = false;
 
@@ -116,27 +156,45 @@ class BuyBoxSyncService
                 'timeout' => $cfg['timeout'] ?? null,
             ]);
 
+            if (($r['status'] ?? null) === 'blocked') {
+                $blockStreak++;
+                $stats['blocked']++;
+            } else {
+                $blockStreak = 0;
+            }
+
             $this->persist($companyId, $item->id, $r, $ourSeller, $stats);
 
             if ($onTick) {
                 $onTick($stats);
+            }
+
+            if ($blockStreak >= self::BLOCK_STREAK_ABORT) {
+                $stats['aborted'] = true;
+                $stats['reason'] = "Interrompido: o site bloqueou {$blockStreak} requisições seguidas (HTTP 403). "
+                    . 'Não insistimos — use um canal autorizado (relatório/planilha do Seller Center).';
+                Log::warning('[netshoes-scraper] rodada abortada por bloqueio', ['company' => $companyId]);
+                break;
             }
         }
 
         return $stats;
     }
 
-    /** Grava o resultado no produto + snapshot histórico. */
+    /** Persiste. Só grava preço quando a coleta foi realmente bem-sucedida. */
     private function persist(int $companyId, int $productId, array $r, string $ourSeller, array &$stats): void
     {
         $cols = Schema::getColumnListing('products');
         $has = fn ($c) => in_array($c, $cols, true);
         $payload = [];
 
-        if (!$r['ok']) {
+        if (empty($r['ok'])) {
             $stats['fail']++;
+            // NUNCA toca em market_price/market_source aqui — só registra o erro.
             if ($has('market_error')) {
-                $payload['market_error'] = substr((string) $r['error'], 0, 290);
+                $status = $r['status'] ?? 'error';
+                $http = $r['http'] ?? '—';
+                $payload['market_error'] = substr("[{$status}] HTTP {$http}: " . (string) ($r['error'] ?? ''), 0, 290);
             }
             if ($has('market_checked_at')) {
                 $payload['market_checked_at'] = now();
@@ -149,14 +207,14 @@ class BuyBoxSyncService
 
         $stats['ok']++;
 
-        // Ganhamos a Buy Box? (só dá pra afirmar se a loja foi identificada e
-        // temos o nome da nossa loja configurado)
         $winner = null;
         if ($ourSeller !== '' && !empty($r['seller'])) {
             $winner = NetshoesBuyBoxScraper::normalizeSeller($r['seller']) === $ourSeller;
             $winner ? $stats['winning']++ : $stats['losing']++;
         }
 
+        // Atenção: $r['price'] é o preço do ANÚNCIO (highPrice). O lowPrice
+        // (PIX) nunca entra como preço de mercado.
         if ($has('market_price')) $payload['market_price'] = $r['price'];
         if ($has('market_seller')) $payload['market_seller'] = $r['seller'];
         if ($has('market_url')) $payload['market_url'] = substr((string) $r['url'], 0, 590) ?: null;
@@ -197,7 +255,7 @@ class BuyBoxSyncService
                 'updated_at' => now(),
             ]);
         } catch (\Throwable $e) {
-            // histórico é best-effort — nunca derruba a coleta
+            // histórico é best-effort
         }
     }
 }

@@ -3,23 +3,30 @@
 namespace App\Services\Netshoes;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /**
- * Coleta de Buy Box na Netshoes a partir do SKU Netshoes (que é universal
- * entre sellers — todos anunciam o mesmo SKU no mesmo produto).
+ * Coleta de Buy Box na Netshoes a partir do SKU Netshoes.
  *
- * Retorna: preço vencedor, loja vencedora, link do anúncio e nº de ofertas.
+ * ⚠️ ESTADO ATUAL: a Netshoes BLOQUEIA requisições server-side (403 Access
+ * Denied na borda Akamai). Este coletor fica DESLIGADO por padrão e existe
+ * para diagnóstico. A fonte oficial de preço de mercado é o relatório de Buy
+ * Box do Seller Center / API autorizada / planilha (ver MarketPriceImport).
+ * Não há — e não deve haver — tentativa de contornar o bloqueio.
  *
- * O parsing usa uma CADEIA DE ESTRATÉGIAS, da mais estável para a mais frágil:
- *   1. JSON-LD (schema.org Product/Offer/AggregateOffer) — padrão e estável
- *   2. JSON embutido no HTML (__NEXT_DATA__ / __INITIAL_STATE__ / apollo)
- *   3. Regex direto no HTML (último recurso)
- *
- * Cada resposta informa qual estratégia funcionou (`strategy`), o que permite
- * diagnosticar e ajustar sem adivinhação quando o site muda de layout.
- *
- * Boas práticas de coleta: User-Agent real, timeout curto, no máximo 1 retry,
- * e um intervalo entre requisições (pausa) definido pelo chamador.
+ * PREMISSAS VALIDADAS NO HTML REAL (PDP Netshoes):
+ *  - A busca por SKU funciona: /busca?q={code}; a PDP é /p/{slug}-{code}.
+ *  - NÃO existe __NEXT_DATA__ na página (estratégia removida).
+ *  - O JSON-LD traz apenas AggregateOffer: {lowPrice, highPrice, offerCount}
+ *    e NÃO traz o vendedor.
+ *  - CRÍTICO: `lowPrice` é o preço à vista/PIX, NÃO o preço do anúncio.
+ *    Ex.: lowPrice=125,47 (PIX) vs. preço real da Buy Box=154,90 (highPrice).
+ *    Usar lowPrice grava ~19% abaixo do real em todo o catálogo — por isso o
+ *    preço de mercado vem de `highPrice` e o lowPrice é devolvido à parte,
+ *    apenas informativo.
+ *  - `offerCount` conta faixas de preço, NÃO número de sellers — não deve ser
+ *    usado como "quantos concorrentes".
+ *  - O vendedor só aparece no texto renderizado: "Vendido por <loja>".
  */
 class NetshoesBuyBoxScraper
 {
@@ -30,10 +37,29 @@ class NetshoesBuyBoxScraper
         'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
     ];
 
+    /** Resultado vazio/padrão — nunca "meio preenchido". */
+    private function base(string $url, string $code): array
+    {
+        return [
+            'ok' => false,
+            'status' => 'error',   // ok | blocked | not_found | no_price | error
+            'http' => null,
+            'price' => null,       // preço do anúncio (highPrice) — o preço de mercado
+            'pix_price' => null,   // lowPrice (à vista/PIX) — NÃO é preço de mercado
+            'seller' => null,
+            'url' => null,
+            'offers' => null,      // offerCount (faixas de preço, não sellers)
+            'strategy' => null,
+            'error' => null,
+            'html_len' => 0,
+            'requested_url' => $url,
+            'code' => $code,
+        ];
+    }
+
     /**
-     * Consulta um SKU e devolve os dados de Buy Box.
-     *
-     * @return array{ok:bool,price:?float,seller:?string,url:?string,offers:?int,strategy:?string,http:?int,error:?string,html_len:int}
+     * Consulta um SKU. Só devolve ok=true com HTTP 200 E preço extraído —
+     * qualquer outro caso é reportado com o status real (nunca grava preço).
      */
     public function fetch(string $netshoesSku, array $opts = []): array
     {
@@ -41,11 +67,7 @@ class NetshoesBuyBoxScraper
         $code = $this->productCode($netshoesSku);
         $url = str_replace(['{code}', '{sku}'], [rawurlencode($code), rawurlencode($netshoesSku)], $opts['search_url']);
 
-        $out = [
-            'ok' => false, 'price' => null, 'seller' => null, 'url' => null,
-            'offers' => null, 'strategy' => null, 'http' => null, 'error' => null,
-            'html_len' => 0, 'requested_url' => $url, 'code' => $code,
-        ];
+        $out = $this->base($url, $code);
 
         try {
             $res = Http::withHeaders([
@@ -62,33 +84,69 @@ class NetshoesBuyBoxScraper
             $out['html_len'] = strlen($html);
             $out['url'] = (string) ($res->effectiveUri() ?? $url);
 
-            if (!$res->successful()) {
-                $out['error'] = 'HTTP ' . $res->status();
-                return $out;
-            }
-            if ($html === '') {
-                $out['error'] = 'Resposta vazia';
+            // Bloqueio de borda (Akamai) — distinto de "não encontrado".
+            if (in_array($res->status(), [401, 403, 405, 406, 429], true)
+                || stripos($html, 'Access Denied') !== false
+                || stripos($html, 'akamai') !== false && $res->status() >= 400) {
+                $out['status'] = 'blocked';
+                $out['error'] = "Bloqueado pelo site (HTTP {$res->status()}). A Netshoes não permite coleta server-side.";
+                Log::warning('[netshoes-scraper] bloqueado', ['sku' => $netshoesSku, 'http' => $res->status(), 'url' => $url]);
                 return $out;
             }
 
-            foreach (['parseJsonLd', 'parseEmbeddedJson', 'parseRegex'] as $strategy) {
-                $hit = $this->{$strategy}($html);
-                if ($hit && ($hit['price'] ?? null)) {
-                    $out['price'] = $hit['price'];
-                    $out['seller'] = $hit['seller'] ?? null;
-                    $out['offers'] = $hit['offers'] ?? null;
-                    if (!empty($hit['url'])) {
-                        $out['url'] = $hit['url'];
-                    }
-                    $out['strategy'] = $strategy;
-                    $out['ok'] = true;
-                    return $out;
+            if ($res->status() === 404) {
+                $out['status'] = 'not_found';
+                $out['error'] = 'Produto não encontrado (HTTP 404).';
+                return $out;
+            }
+
+            if (!$res->successful()) {
+                $out['status'] = 'error';
+                $out['error'] = 'HTTP ' . $res->status();
+                Log::warning('[netshoes-scraper] resposta não-200', ['sku' => $netshoesSku, 'http' => $res->status()]);
+                return $out;
+            }
+
+            if ($html === '') {
+                $out['status'] = 'error';
+                $out['error'] = 'Resposta vazia (HTTP 200 sem corpo).';
+                return $out;
+            }
+
+            // --- extração (só a partir daqui, com HTTP 200 garantido) ---
+            $ld = $this->parseJsonLd($html);
+            $seller = $this->extractSeller($html);
+
+            if ($ld && ($ld['price'] ?? null)) {
+                $out['price'] = $ld['price'];        // highPrice = preço do anúncio
+                $out['pix_price'] = $ld['pix_price'] ?? null;
+                $out['offers'] = $ld['offers'] ?? null;
+                $out['url'] = $ld['url'] ?? $out['url'];
+                $out['strategy'] = 'jsonld_aggregate';
+            } else {
+                $rx = $this->parseRegex($html);
+                if ($rx && ($rx['price'] ?? null)) {
+                    $out['price'] = $rx['price'];
+                    $out['url'] = $rx['url'] ?? $out['url'];
+                    $out['strategy'] = 'regex';
                 }
             }
 
-            $out['error'] = 'Preço não encontrado no HTML (layout pode ter mudado)';
+            $out['seller'] = $seller;
+
+            if ($out['price'] === null) {
+                $out['status'] = 'no_price';
+                $out['error'] = 'HTTP 200, mas nenhum preço encontrado no HTML (layout pode ter mudado).';
+                Log::warning('[netshoes-scraper] sem preço', ['sku' => $netshoesSku, 'html_len' => $out['html_len']]);
+                return $out;
+            }
+
+            $out['ok'] = true;
+            $out['status'] = 'ok';
         } catch (\Throwable $e) {
+            $out['status'] = 'error';
             $out['error'] = substr($e->getMessage(), 0, 250);
+            Log::warning('[netshoes-scraper] exceção', ['sku' => $netshoesSku, 'erro' => $out['error']]);
         }
 
         return $out;
@@ -96,17 +154,14 @@ class NetshoesBuyBoxScraper
 
     /**
      * Código do produto a partir do SKU (remove o sufixo de tamanho).
-     * Ex.: "39V-24AJ-205-43" -> "39V-24AJ-205"; "16037-ARESOL-ARENITO-38" -> "16037-ARESOL-ARENITO".
-     * Sellers diferentes disputam o MESMO produto, então a busca é feita no
-     * nível do produto (sem o tamanho).
+     * Ex.: "39V-24AJ-205-43" -> "39V-24AJ-205"; "I6E-7247-060" fica igual.
      */
     public function productCode(string $sku): string
     {
         $sku = trim($sku);
         $parts = explode('-', $sku);
-        if (count($parts) > 1) {
+        if (count($parts) > 3) {
             $last = strtoupper(end($parts));
-            // tamanho numérico (33..48) ou literal (P, M, G, GG, XG, PP, U, UN)
             if (preg_match('/^\d{1,3}$/', $last) || in_array($last, ['P', 'M', 'G', 'GG', 'XG', 'XGG', 'PP', 'U', 'UN'], true)) {
                 array_pop($parts);
                 return implode('-', $parts);
@@ -115,9 +170,12 @@ class NetshoesBuyBoxScraper
         return $sku;
     }
 
-    /* ============================ estratégias ============================ */
+    /* ============================ extração ============================ */
 
-    /** 1) JSON-LD schema.org — a fonte mais estável quando existe. */
+    /**
+     * JSON-LD (AggregateOffer). Devolve highPrice como preço de mercado e
+     * lowPrice separado como preço PIX — jamais o contrário.
+     */
     private function parseJsonLd(string $html): ?array
     {
         if (!preg_match_all('#<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>#is', $html, $m)) {
@@ -129,218 +187,79 @@ class NetshoesBuyBoxScraper
             if (!is_array($data)) {
                 continue;
             }
-            foreach ($this->flattenGraph($data) as $node) {
+            $nodes = isset($data['@graph']) && is_array($data['@graph'])
+                ? $data['@graph']
+                : (array_is_list($data) ? $data : [$data]);
+
+            foreach ($nodes as $node) {
+                if (!is_array($node)) {
+                    continue;
+                }
                 $type = $node['@type'] ?? null;
                 $type = is_array($type) ? implode(',', $type) : (string) $type;
                 if (stripos($type, 'Product') === false) {
                     continue;
                 }
                 $offers = $node['offers'] ?? null;
-                if (!$offers) {
+                if (!is_array($offers)) {
                     continue;
                 }
-                $hit = $this->fromOffers($offers);
-                if ($hit) {
-                    $hit['url'] = $hit['url'] ?? ($node['url'] ?? null);
-                    return $hit;
+
+                $high = $this->toFloat($offers['highPrice'] ?? null);
+                $low = $this->toFloat($offers['lowPrice'] ?? null);
+                $single = $this->toFloat($offers['price'] ?? null);
+
+                // Preço do anúncio: highPrice quando existe (lowPrice é PIX).
+                $price = $high ?? $single;
+                if (!$price) {
+                    continue;
                 }
-            }
-        }
-        return null;
-    }
 
-    /** Achata @graph / listas para varrer todos os nós. */
-    private function flattenGraph(array $data): array
-    {
-        if (isset($data['@graph']) && is_array($data['@graph'])) {
-            return $data['@graph'];
-        }
-        // lista de nós ou nó único
-        return array_is_list($data) ? $data : [$data];
-    }
-
-    /** Extrai preço/seller/contagem de um bloco offers (Offer ou AggregateOffer). */
-    private function fromOffers($offers): ?array
-    {
-        if (!is_array($offers)) {
-            return null;
-        }
-
-        // AggregateOffer: menor preço + nº de ofertas
-        $type = $offers['@type'] ?? null;
-        $type = is_array($type) ? implode(',', $type) : (string) $type;
-        if (stripos($type, 'AggregateOffer') !== false) {
-            $price = $this->toFloat($offers['lowPrice'] ?? $offers['price'] ?? null);
-            $count = isset($offers['offerCount']) ? (int) $offers['offerCount'] : null;
-            $seller = $this->sellerName($offers['seller'] ?? $offers['offeredBy'] ?? null);
-
-            // Alguns sites aninham a lista real dentro de "offers"
-            if (isset($offers['offers']) && is_array($offers['offers'])) {
-                $best = $this->bestOfferFromList($offers['offers']);
-                if ($best) {
-                    return [
-                        'price' => $best['price'] ?? $price,
-                        'seller' => $best['seller'] ?? $seller,
-                        'offers' => $count ?? $best['offers'] ?? null,
-                        'url' => $best['url'] ?? null,
-                    ];
-                }
-            }
-            if ($price) {
-                return ['price' => $price, 'seller' => $seller, 'offers' => $count, 'url' => $offers['url'] ?? null];
-            }
-            return null;
-        }
-
-        // Lista de Offers -> pega a mais barata (a que ganha a Buy Box)
-        if (array_is_list($offers)) {
-            return $this->bestOfferFromList($offers);
-        }
-
-        // Offer único
-        $price = $this->toFloat($offers['price'] ?? $offers['lowPrice'] ?? null);
-        if (!$price) {
-            return null;
-        }
-        return [
-            'price' => $price,
-            'seller' => $this->sellerName($offers['seller'] ?? $offers['offeredBy'] ?? null),
-            'offers' => 1,
-            'url' => $offers['url'] ?? null,
-        ];
-    }
-
-    private function bestOfferFromList(array $list): ?array
-    {
-        $best = null;
-        $n = 0;
-        foreach ($list as $o) {
-            if (!is_array($o)) {
-                continue;
-            }
-            $p = $this->toFloat($o['price'] ?? $o['lowPrice'] ?? null);
-            if (!$p) {
-                continue;
-            }
-            $n++;
-            if ($best === null || $p < $best['price']) {
-                $best = [
-                    'price' => $p,
-                    'seller' => $this->sellerName($o['seller'] ?? $o['offeredBy'] ?? null),
-                    'url' => $o['url'] ?? null,
+                return [
+                    'price' => $price,
+                    'pix_price' => ($low !== null && $high !== null && $low < $high) ? $low : null,
+                    'offers' => isset($offers['offerCount']) ? (int) $offers['offerCount'] : null,
+                    'url' => $node['url'] ?? null,
                 ];
             }
         }
-        if ($best) {
-            $best['offers'] = $n;
-        }
-        return $best;
-    }
-
-    private function sellerName($seller): ?string
-    {
-        if (is_string($seller)) {
-            return trim($seller) ?: null;
-        }
-        if (is_array($seller)) {
-            $n = $seller['name'] ?? $seller['legalName'] ?? null;
-            return is_string($n) ? (trim($n) ?: null) : null;
-        }
         return null;
     }
 
-    /** 2) JSON embutido (Next.js/Nuxt/Apollo) — busca profunda por chaves conhecidas. */
-    private function parseEmbeddedJson(string $html): ?array
+    /**
+     * Vendedor a partir do texto renderizado ("Vendido por X", "Vendido e
+     * entregue por X"), parando antes de "Enviado por".
+     */
+    public function extractSeller(string $html): ?string
     {
-        $blobs = [];
-        $patterns = [
-            '#<script[^>]*id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>#is',
-            '#window\.__INITIAL_STATE__\s*=\s*(\{.*?\});?\s*</script>#is',
-            '#window\.__APOLLO_STATE__\s*=\s*(\{.*?\});?\s*</script>#is',
-            '#window\.__PRELOADED_STATE__\s*=\s*(\{.*?\});?\s*</script>#is',
-        ];
-        foreach ($patterns as $p) {
-            if (preg_match($p, $html, $m)) {
-                $blobs[] = $m[1];
-            }
-        }
-
-        foreach ($blobs as $raw) {
-            $data = json_decode(trim($raw), true);
-            if (!is_array($data)) {
-                continue;
-            }
-            $found = $this->deepFindOffer($data);
-            if ($found && ($found['price'] ?? null)) {
-                return $found;
-            }
-        }
-        return null;
-    }
-
-    /** Varredura recursiva procurando um par preço + vendedor. */
-    private function deepFindOffer(array $node, int $depth = 0): ?array
-    {
-        if ($depth > 12) {
+        $text = preg_replace('/\s+/u', ' ', strip_tags($html));
+        if (!is_string($text) || $text === '') {
             return null;
         }
-
-        $priceKeys = ['price', 'salePrice', 'finalPrice', 'bestPrice', 'currentPrice', 'lowPrice', 'priceValue'];
-        $sellerKeys = ['sellerName', 'seller_name', 'seller', 'sellerid', 'storeName', 'store', 'partner', 'partnerName'];
-
-        $price = null;
-        $seller = null;
-        foreach ($priceKeys as $k) {
-            foreach ($node as $key => $val) {
-                if (strcasecmp((string) $key, $k) === 0) {
-                    $p = $this->toFloat($val);
-                    if ($p && ($price === null || $p < $price)) {
-                        $price = $p;
-                    }
+        $patterns = [
+            '/Vendido\s+e\s+entregue\s+por\s*:?\s*(.{2,60}?)\s*(?:Enviado|Entregue|Garantia|\||\.|$)/iu',
+            '/Vendido\s+por\s*:?\s*(.{2,60}?)\s*(?:Enviado|Entregue|Garantia|\||\.|$)/iu',
+        ];
+        foreach ($patterns as $p) {
+            if (preg_match($p, $text, $m)) {
+                $s = trim($m[1], " \t\n\r\0\x0B:-–—");
+                if ($s !== '' && mb_strlen($s) >= 2) {
+                    return $s;
                 }
             }
         }
-        foreach ($sellerKeys as $k) {
-            foreach ($node as $key => $val) {
-                if (strcasecmp((string) $key, $k) === 0) {
-                    $s = $this->sellerName($val);
-                    if ($s !== null && $seller === null) {
-                        $seller = $s;
-                    }
-                }
-            }
-        }
-        if ($price && $seller) {
-            return ['price' => $price, 'seller' => $seller, 'offers' => null, 'url' => $node['url'] ?? null];
-        }
-
-        $partial = $price ? ['price' => $price, 'seller' => null, 'offers' => null, 'url' => null] : null;
-
-        foreach ($node as $val) {
-            if (is_array($val)) {
-                $deep = $this->deepFindOffer($val, $depth + 1);
-                if ($deep && ($deep['price'] ?? null) && ($deep['seller'] ?? null)) {
-                    return $deep; // preferimos um par completo
-                }
-                if ($deep && $partial === null) {
-                    $partial = $deep;
-                }
-            }
-        }
-        return $partial;
+        return null;
     }
 
-    /** 3) Regex no HTML — último recurso. */
+    /** Último recurso: preço no HTML. Nunca capta "a partir de"/PIX. */
     private function parseRegex(string $html): ?array
     {
         $price = null;
-        $seller = null;
         $url = null;
 
         foreach ([
-            '#"(?:lowPrice|bestPrice|salePrice|finalPrice|price)"\s*:\s*"?([\d.,]+)"?#i',
             '#itemprop=["\']price["\'][^>]*content=["\']([\d.,]+)["\']#i',
-            '#R\$\s*([\d.]+,\d{2})#',
+            '#"(?:highPrice|listPrice|sellingPrice)"\s*:\s*"?([\d.,]+)"?#i',
         ] as $p) {
             if (preg_match($p, $html, $m)) {
                 $price = $this->toFloat($m[1]);
@@ -349,22 +268,11 @@ class NetshoesBuyBoxScraper
                 }
             }
         }
-        foreach ([
-            '#"(?:sellerName|storeName|partnerName)"\s*:\s*"([^"]{2,80})"#i',
-            '#vendido\s+e\s+entregue\s+por[:\s]*</?[^>]*>?\s*([^<\n]{2,60})#i',
-        ] as $p) {
-            if (preg_match($p, $html, $m)) {
-                $seller = trim(strip_tags($m[1]));
-                if ($seller !== '') {
-                    break;
-                }
-            }
-        }
         if (preg_match('#<meta[^>]+property=["\']og:url["\'][^>]+content=["\']([^"\']+)["\']#i', $html, $m)) {
             $url = $m[1];
         }
 
-        return $price ? ['price' => $price, 'seller' => $seller, 'offers' => null, 'url' => $url] : null;
+        return $price ? ['price' => $price, 'url' => $url] : null;
     }
 
     /** Converte "1.234,56" / "1234.56" / 1234.56 em float. */
@@ -374,9 +282,7 @@ class NetshoesBuyBoxScraper
             return null;
         }
         if (is_int($v) || is_float($v)) {
-            $f = (float) $v;
-            // muitos payloads trazem centavos como inteiro (ex.: 19990 = 199,90)
-            return $f > 0 ? $f : null;
+            return (float) $v > 0 ? (float) $v : null;
         }
         $s = trim((string) $v);
         if ($s === '') {
