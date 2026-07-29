@@ -69,6 +69,10 @@ Route::middleware(['auth'])->group(function () {
 
     // Calculadora de Retorno por Canal (geral — substitui a calculadora só do ML)
     Route::get('/calculator', [\App\Http\Controllers\ChannelCalculatorController::class , 'index'])->name('calculator.index');
+    Route::post('/calculator/compute', [\App\Http\Controllers\ChannelCalculatorController::class , 'compute'])->name('calculator.compute');
+
+    // Segmentação de SKU — papel de precificação, ciclo de vida, saúde de estoque e posição competitiva
+    Route::get('/segmentacao', [\App\Http\Controllers\SkuStrategyController::class , 'index'])->name('segmentation.index');
 
     // Financeiro Inteligente (Dashboard CFO & DRE)
     Route::prefix('financial')->name('financial.')->group(function () {
@@ -171,13 +175,17 @@ Route::middleware(['auth'])->group(function () {
         // Análise de Vendas (sobre pedidos importados)
         Route::get('/sales', [\App\Http\Controllers\SalesController::class , 'index'])->name('sales.index');
 
-        // Pedidos e Etiquetas
-        Route::get('/orders', [OrderController::class , 'index'])->name('orders.index');
-        Route::get('/expedition', [\App\Http\Controllers\ExpeditionController::class, 'index'])->name('orders.expedition');
-        Route::post('/expedition/{id}/pack', [\App\Http\Controllers\ExpeditionController::class, 'pack'])->name('orders.pack');
-        Route::get('/orders/{id}', [OrderController::class , 'show'])->name('orders.show');
-        Route::get('/orders/{id}/label', [OrderController::class , 'printLabel'])->name('orders.label');
-        Route::post('/orders/{id}/sync', [OrderController::class , 'syncSingle'])->name('orders.sync_single');
+        // Pedidos e Etiquetas (atrás de feature flag — ver config/features.php)
+        Route::middleware('feature:orders')->group(function () {
+            Route::get('/orders', [OrderController::class , 'index'])->name('orders.index');
+            Route::get('/orders/{id}', [OrderController::class , 'show'])->name('orders.show');
+            Route::get('/orders/{id}/label', [OrderController::class , 'printLabel'])->name('orders.label');
+            Route::post('/orders/{id}/sync', [OrderController::class , 'syncSingle'])->name('orders.sync_single');
+        });
+        Route::middleware('feature:expedition')->group(function () {
+            Route::get('/expedition', [\App\Http\Controllers\ExpeditionController::class, 'index'])->name('orders.expedition');
+            Route::post('/expedition/{id}/pack', [\App\Http\Controllers\ExpeditionController::class, 'pack'])->name('orders.pack');
+        });
 
         // Inteligência 360
         // War Room removido — rota mantida como redirect para não quebrar links legados.
@@ -218,13 +226,15 @@ Route::middleware(['auth'])->group(function () {
             Route::patch('/accounts/{credential}/toggle', [\App\Http\Controllers\MarketplaceAccountController::class, 'toggle'])->name('accounts.toggle');
             Route::delete('/accounts/{credential}', [\App\Http\Controllers\MarketplaceAccountController::class, 'destroy'])->name('accounts.destroy');
 
-            // Central de Perguntas
-            Route::get('/questions', [\App\Http\Controllers\MarketplaceQuestionController::class, 'index'])->name('questions.index');
-            Route::post('/questions/sync', [\App\Http\Controllers\MarketplaceQuestionController::class, 'sync'])->name('questions.sync');
-            Route::post('/questions/{question}/answer', [\App\Http\Controllers\MarketplaceQuestionController::class, 'answer'])->name('questions.answer');
+            // Central de Perguntas (atrás de feature flag — ver config/features.php)
+            Route::middleware('feature:marketplaces_questions')->group(function () {
+                Route::get('/questions', [\App\Http\Controllers\MarketplaceQuestionController::class, 'index'])->name('questions.index');
+                Route::post('/questions/sync', [\App\Http\Controllers\MarketplaceQuestionController::class, 'sync'])->name('questions.sync');
+                Route::post('/questions/{question}/answer', [\App\Http\Controllers\MarketplaceQuestionController::class, 'answer'])->name('questions.answer');
+            });
 
-            // Automação de Perguntas (AI/Rules)
-            Route::prefix('auto-reply')->name('auto-reply.')->group(function () {
+            // Automação de Perguntas (AI/Rules) — atrás de feature flag
+            Route::middleware('feature:marketplaces_auto_reply')->prefix('auto-reply')->name('auto-reply.')->group(function () {
                 Route::get('/', [\App\Http\Controllers\Marketplace\AutoReplyRuleController::class, 'index'])->name('index');
                 Route::post('/', [\App\Http\Controllers\Marketplace\AutoReplyRuleController::class, 'store'])->name('store');
                 Route::delete('/{id}', [\App\Http\Controllers\Marketplace\AutoReplyRuleController::class, 'destroy'])->name('destroy');
@@ -233,8 +243,11 @@ Route::middleware(['auth'])->group(function () {
 
             // Gestão de Anúncios (Listings)
             Route::get('/listings', [\App\Http\Controllers\MarketplaceListingController::class, 'index'])->name('listings.index');
-            Route::get('/listings/bulk', [\App\Http\Controllers\MarketplaceListingController::class, 'bulkEditor'])->name('listings.bulk');
-            Route::post('/listings/bulk', [\App\Http\Controllers\MarketplaceListingController::class, 'bulkUpdate'])->name('listings.bulk_update');
+            // Edição em massa — atrás de feature flag
+            Route::middleware('feature:marketplaces_listings_bulk')->group(function () {
+                Route::get('/listings/bulk', [\App\Http\Controllers\MarketplaceListingController::class, 'bulkEditor'])->name('listings.bulk');
+                Route::post('/listings/bulk', [\App\Http\Controllers\MarketplaceListingController::class, 'bulkUpdate'])->name('listings.bulk_update');
+            });
             Route::get('/listings/history', [\App\Http\Controllers\MarketplaceListingController::class, 'history'])->name('listings.history');
             Route::post('/listings/rollback', [\App\Http\Controllers\MarketplaceListingController::class, 'rollback'])->name('listings.rollback');
             Route::post('/listings/sync', [\App\Http\Controllers\MarketplaceListingController::class, 'sync'])->name('listings.sync');

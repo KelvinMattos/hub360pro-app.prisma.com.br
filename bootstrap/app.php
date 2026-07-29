@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // 2. Apelido para o Middleware do Super Admin (Segurança)
         $middleware->alias([
             'super.admin' => \App\Http\Middleware\SuperAdminCheck::class,
+            'feature' => \App\Http\Middleware\FeatureFlag::class,
         ]);
 
         // 3. Libera as rotas de webhook da verificação CSRF (Para notificações do ML/Shopee/Asaas)

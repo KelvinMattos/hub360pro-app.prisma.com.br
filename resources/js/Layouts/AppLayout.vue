@@ -104,7 +104,18 @@ const isSidebarOpen = ref(false);
 const page = usePage();
 const flash = computed(() => page.props.flash || {});
 
-const navigation = [
+// Itens de menu atrás de feature flag (ver config/features.php) — some
+// automaticamente quando a flag correspondente está desligada, sem apagar
+// nada, só escondendo o atalho para uma rota que devolveria 404.
+const FEATURE_BY_ROUTE = {
+    'orders.index': 'orders',
+    'orders.expedition': 'expedition',
+    'marketplaces.questions.index': 'marketplaces_questions',
+    'marketplaces.auto-reply.index': 'marketplaces_auto_reply',
+    'marketplaces.listings.bulk': 'marketplaces_listings_bulk',
+};
+
+const navigationConfig = [
     {
         title: 'Monitoramento de Preços',
         items: [
@@ -121,6 +132,7 @@ const navigation = [
         title: 'Decisão & Precificação',
         items: [
             { label: 'Centro de Decisão', route: 'decision.index', icon: 'fa-solid fa-chess-king' },
+            { label: 'Segmentação de SKU', route: 'segmentation.index', icon: 'fa-solid fa-layer-group' },
             { label: 'Calculadora de Canais', route: 'calculator.index', icon: 'fa-solid fa-calculator' },
             { label: 'Cálculo Promo', route: 'pricing.calculo-promo', activePattern: 'pricing.calculo-promo', icon: 'fa-solid fa-tags' },
             { label: 'Aging de Estoque', route: 'inventory.aging', icon: 'fa-solid fa-hourglass-half' },
@@ -197,6 +209,17 @@ const navigation = [
         ]
     }
 ];
+
+const features = computed(() => page.props.features || {});
+const navigation = computed(() => navigationConfig
+    .map(section => ({
+        ...section,
+        items: section.items.filter(item => {
+            const flag = FEATURE_BY_ROUTE[item.route];
+            return !flag || features.value[flag];
+        }),
+    }))
+    .filter(section => section.items.length > 0));
 
 // Auto-clear flash messages after 5 seconds
 watch(flash, (newVal) => {

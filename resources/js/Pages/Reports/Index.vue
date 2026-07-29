@@ -47,7 +47,7 @@
                 <div class="bg-white shadow-premium border border-slate-200 p-8 rounded-[2.5rem] shadow-2xl">
                     <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-3">Total de Pedidos</p>
                     <h3 class="text-3xl font-black text-slate-900 tracking-tighter">{{ currentStats.total_orders }}</h3>
-                    <p class="text-[9px] text-slate-600 font-bold mt-2 uppercase">Conversão estável</p>
+                    <p class="text-[9px] text-slate-600 font-bold mt-2 uppercase">Pedidos no período</p>
                 </div>
 
                 <div class="bg-white shadow-premium border border-slate-200 p-8 rounded-[2.5rem] shadow-2xl">
@@ -146,12 +146,12 @@
                             <div class="flex-1">
                                 <div class="flex justify-between mb-2">
                                     <span class="text-[10px] font-black text-slate-900 uppercase tracking-widest">{{ channel.platform }}</span>
-                                    <span class="text-[10px] font-bold text-slate-500 italic">{{ ((channel.total / currentStats.revenue) * 100).toFixed(1) }}%</span>
+                                    <span class="text-[10px] font-bold text-slate-500 italic">{{ channelPct(channel.total).toFixed(1) }}%</span>
                                 </div>
                                 <div class="h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                                     <div 
+                                     <div
                                         class="h-full bg-blue-500 rounded-full"
-                                        :style="{ width: ((channel.total / currentStats.revenue) * 100) + '%' }"
+                                        :style="{ width: channelPct(channel.total) + '%' }"
                                      ></div>
                                 </div>
                             </div>
@@ -217,6 +217,11 @@ const formatShortCurrency = (value) => {
     if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
     if (value >= 1000) return (value / 1000).toFixed(1) + 'K';
     return value.toFixed(0);
+};
+
+const channelPct = (total) => {
+    const revenue = props.currentStats?.revenue || 0;
+    return revenue > 0 ? (total / revenue) * 100 : 0;
 };
 
 const getChannelIcon = (platform) => {

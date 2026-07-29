@@ -8,14 +8,6 @@ use Inertia\Inertia;
 
 class MeliIntelligenceController extends Controller
 {
-    public function calculator() {
-        return Inertia::render('Meli/Calculator'); 
-    }
-
-    public function warRoom() {
-        return Inertia::render('Meli/WarRoom');
-    }
-
     public function searchCompetitors(Request $request)
     {
         $term = $request->input('q');

@@ -49,6 +49,7 @@ class HandleInertiaRequests extends Middleware
                 'warning' => $request->session()->get('warning'),
                 'importResult' => $request->session()->get('importResult'),
             ],
+            'features' => config('features'),
         ]);
     }
 }

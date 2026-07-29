@@ -18,17 +18,10 @@ class ManagementDecisionService
 {
     private const LIST_LIMIT = 80;
 
-    private const ML_TIER = [
-        ['max' => 12.5, 'mode' => 'half'], ['max' => 29, 'fee' => 6.25],
-        ['max' => 50, 'fee' => 6.5], ['max' => 79, 'fee' => 6.75], ['max' => INF, 'fee' => 0],
-    ];
-    private const SHOPEE_TIER = [
-        ['max' => 79.99, 'fee' => 4], ['max' => 99.99, 'fee' => 16],
-        ['max' => 199.99, 'fee' => 20], ['max' => INF, 'fee' => 26],
-    ];
-
-    public function __construct(private ChannelConfigService $config)
-    {
+    public function __construct(
+        private ChannelConfigService $config,
+        private PricingEngine $pricingEngine
+    ) {
     }
 
     public function analyze(int $companyId, ?string $channelKey = null): array
@@ -166,30 +159,20 @@ class ManagementDecisionService
         ];
     }
 
+    /**
+     * Delega para PricingEngine (fonte única de verdade). Mantém a mesma
+     * assinatura/contrato desta classe (retorna 0.0 — nunca null — para não
+     * quebrar as comparações numéricas já existentes mais abaixo neste
+     * serviço); a fórmula em si vive só em PricingEngine::tieredBreakEven().
+     */
     private function breakEven(float $cost, float $imposto, float $mc, float $comissao, string $temFaixa): float
     {
-        $aliq = 1 - ($imposto + $mc + $comissao) / 100;
-        if ($aliq <= 0) return 0;
-        $base = $cost / $aliq;
-        if ($temFaixa === 'ml') {
-            if ($base < 12.5) return $base + $base / 2;
-            foreach (self::ML_TIER as $t) {
-                if (isset($t['fee']) && $base < $t['max']) return ($cost + $t['fee']) / $aliq;
-            }
-            return $base;
-        }
-        if ($temFaixa === 'shopee') {
-            foreach (self::SHOPEE_TIER as $t) {
-                if ($base <= $t['max']) return ($cost + $t['fee']) / $aliq;
-            }
-            return $base;
-        }
-        return $base;
+        return $this->pricingEngine->tieredBreakEven($cost, $imposto + $mc + $comissao, $temFaixa) ?? 0.0;
     }
 
     private function marginUnit(float $price, float $cost, float $encargosPct): float
     {
-        return $price - $price * ($encargosPct / 100) - $cost;
+        return $this->pricingEngine->unitContribution($price, $cost, $encargosPct);
     }
 
     private function ageBucket(int $months): string

@@ -8,39 +8,14 @@
                 <p class="text-slate-500 mt-2 font-medium">Analise sua fatia de mercado e a concorrência.</p>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
-                <div class="bg-white p-8 rounded-3xl border border-slate-100 shadow-premium flex flex-col items-center">
-                    <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Sua Fatia</p>
-                    <div class="relative w-32 h-32 flex items-center justify-center">
-                        <svg class="w-full h-full transform -rotate-90">
-                            <circle cx="64" cy="64" r="58" stroke="currentColor" stroke-width="12" fill="transparent" class="text-slate-100" />
-                            <circle cx="64" cy="64" r="58" stroke="currentColor" stroke-width="12" fill="transparent" stroke-dasharray="364.4" stroke-dashoffset="310" class="text-emerald-500" />
-                        </svg>
-                        <span class="absolute text-2xl font-black text-slate-900">15%</span>
-                    </div>
-                    <p class="mt-4 text-xs text-slate-500 font-medium">MLB1648 - Informática</p>
-                </div>
-
-                <div class="md:col-span-2 bg-white p-8 rounded-3xl border border-slate-100 shadow-premium">
-                    <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Top Sellers na Categoria</h3>
-                    <div class="space-y-4">
-                        <div v-for="i in 3" :key="i" class="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
-                            <div class="flex items-center gap-4">
-                                <div class="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center font-bold text-slate-500">{{ i }}</div>
-                                <span class="font-bold text-slate-900">Loja Competidora #{{ i }}</span>
-                            </div>
-                            <span class="text-sm font-black text-slate-400">~ 24.5% Share</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-indigo-900 text-white p-10 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-6 shadow-2xl shadow-indigo-900/20">
-                <div class="space-y-2 text-center md:text-left">
-                    <h3 class="text-2xl font-black uppercase tracking-tight">Expandir sua Operação</h3>
-                    <p class="text-indigo-200 font-medium">O Mercado Livre aponta crescimento de 12% nesta categoria para o próximo mês.</p>
-                </div>
-                <button class="px-8 py-4 bg-white text-indigo-900 rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-lg">Descobrir Oportunidades</button>
+            <div class="bg-white p-10 rounded-3xl border border-slate-100 shadow-premium text-center max-w-2xl mx-auto">
+                <i class="fa-solid fa-chart-pie text-4xl text-slate-300 mb-4"></i>
+                <h3 class="text-lg font-bold text-slate-700">Dados insuficientes</h3>
+                <p class="mt-2 text-sm text-slate-500 font-medium" title="dados insuficientes">
+                    Ainda não há uma fonte de dados real para participação de mercado por categoria —
+                    isso depende de uma API oficial de seller (Mercado Livre/Magalu) ainda não integrada.
+                    Nenhum número é exibido aqui até que essa fonte exista.
+                </p>
             </div>
         </div>
     </AppLayout>
