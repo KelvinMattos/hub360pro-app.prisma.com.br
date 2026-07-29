@@ -74,7 +74,16 @@
                     :class="testResult.ok ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'">
                     <div class="font-bold mb-2" :class="testResult.ok ? 'text-emerald-700' : 'text-red-700'">
                         <i :class="testResult.ok ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-exclamation'" class="mr-1"></i>
-                        {{ testResult.ok ? 'Capturado com sucesso' : 'Não foi possível capturar' }}
+                        <template v-if="testResult.ok">Capturado com sucesso</template>
+                        <template v-else-if="testResult.layer === 'transporte'">
+                            Falha antes de consultar o site (erro do próprio sistema)
+                        </template>
+                        <template v-else>Não foi possível capturar do site</template>
+                    </div>
+                    <div v-if="!testResult.ok && testResult.error"
+                        class="mb-3 text-sm font-semibold"
+                        :class="testResult.layer === 'transporte' ? 'text-amber-700' : 'text-red-700'">
+                        {{ testResult.error }}
                     </div>
                     <dl class="grid grid-cols-2 md:grid-cols-3 gap-3">
                         <div><dt class="dt">Situação</dt><dd class="dd"><span class="font-mono text-xs">{{ testResult.status || '—' }}</span></dd></div>
@@ -99,7 +108,15 @@
                             <dt class="dt">Erro</dt><dd class="dd text-red-600 text-xs">{{ testResult.error }}</dd>
                         </div>
                     </dl>
-                    <p v-if="!testResult.ok" class="text-xs text-slate-500 mt-3">
+                    <p v-if="!testResult.ok && testResult.layer === 'transporte'" class="text-xs text-slate-500 mt-3">
+                        Este erro é da aplicação, não da Netshoes. Em 419, recarregue a página (a sessão expirou).
+                        Persistindo, confira se o deploy está atualizado.
+                    </p>
+                    <p v-else-if="!testResult.ok && testResult.status === 'blocked'" class="text-xs text-slate-500 mt-3">
+                        A Netshoes recusou a requisição do servidor (403). É o bloqueio esperado — use a importação
+                        do relatório de Buy Box.
+                    </p>
+                    <p v-else-if="!testResult.ok" class="text-xs text-slate-500 mt-3">
                         Se o HTML veio ({{ n(testResult.html_len) }} bytes) mas nada foi extraído, o layout do site mudou —
                         me envie este diagnóstico que eu ajusto o parser.
                     </p>
@@ -200,6 +217,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useForm, usePage, Link } from '@inertiajs/vue3';
+import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
 const props = defineProps({
@@ -239,22 +257,54 @@ const eta = computed(() => {
 
 onUnmounted(stopPoll);
 
+function csrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || '';
+}
+
+/** Mensagem honesta por status de transporte — nunca esconder o motivo real. */
+function transportMessage(status, data) {
+    if (status === 419) return 'Sessão expirada / token CSRF inválido (419). Recarregue a página e tente de novo.';
+    if (status === 401) return 'Não autenticado (401). Faça login novamente.';
+    if (status === 403) return 'Sem permissão para executar o diagnóstico (403).';
+    if (status === 404) return 'Rota de diagnóstico não encontrada (404). O deploy pode estar desatualizado.';
+    if (status === 419 || status === 422) return data?.message || 'Requisição inválida (422).';
+    if (status >= 500) return data?.message || `Erro interno do servidor (${status}). Verifique o laravel.log.`;
+    return data?.message || `Falha na requisição (HTTP ${status}).`;
+}
+
 async function runTest() {
     testing.value = true;
     testResult.value = null;
     try {
-        const r = await fetch(route('monitoring.scraper.test'), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-            },
-            body: JSON.stringify({ sku: testSku.value }),
-        });
-        testResult.value = await r.json();
+        const { data } = await axios.post(
+            route('monitoring.scraper.test'),
+            { sku: testSku.value },
+            { headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken() } }
+        );
+
+        // Resposta 2xx mas fora do formato esperado (ex.: erro serializado).
+        if (!data || typeof data !== 'object' || !('status' in data)) {
+            testResult.value = {
+                ok: false, layer: 'transporte', status: 'resposta_inesperada',
+                http: 200, error: data?.message || 'O servidor respondeu num formato inesperado.',
+                html_len: 0,
+            };
+        } else {
+            testResult.value = { ...data, layer: 'coleta' };
+        }
     } catch (e) {
-        testResult.value = { ok: false, error: 'Falha de rede: ' + e.message, html_len: 0 };
+        // Falha ANTES de chegar no coletor — mostrar o status real, não "não foi
+        // possível capturar", que atribuiria o erro ao site errado.
+        const status = e?.response?.status ?? null;
+        const data = e?.response?.data;
+        testResult.value = {
+            ok: false,
+            layer: 'transporte',
+            status: status ? `http_${status}` : 'rede',
+            http: status,
+            error: status ? transportMessage(status, data) : `Falha de rede: ${e.message}`,
+            html_len: 0,
+        };
     } finally {
         testing.value = false;
     }

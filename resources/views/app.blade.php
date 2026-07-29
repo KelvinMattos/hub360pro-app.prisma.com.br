@@ -5,6 +5,10 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
+        {{-- Necessário para chamadas POST feitas fora do Inertia (fetch/axios crus).
+             Sem esta meta o header X-CSRF-TOKEN vai vazio e o Laravel responde 419. --}}
+        <meta name="csrf-token" content="{{ csrf_token() }}">
+
         <title inertia>{{ config('app.name', 'PrismaHUB') }}</title>
 
         <!-- Fonts -->
