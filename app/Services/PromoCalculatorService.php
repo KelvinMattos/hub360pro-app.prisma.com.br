@@ -17,17 +17,10 @@ use Illuminate\Support\Carbon;
  */
 class PromoCalculatorService
 {
-    private const ML_TIER = [
-        ['max' => 12.5, 'mode' => 'half'], ['max' => 29, 'fee' => 6.25],
-        ['max' => 50, 'fee' => 6.5], ['max' => 79, 'fee' => 6.75], ['max' => INF, 'fee' => 0],
-    ];
-    private const SHOPEE_TIER = [
-        ['max' => 79.99, 'fee' => 4], ['max' => 99.99, 'fee' => 16],
-        ['max' => 199.99, 'fee' => 20], ['max' => INF, 'fee' => 26],
-    ];
-
-    public function __construct(private ChannelConfigService $config)
-    {
+    public function __construct(
+        private ChannelConfigService $config,
+        private PricingEngine $pricingEngine
+    ) {
     }
 
     public function config(?int $companyId): array
@@ -116,37 +109,20 @@ class PromoCalculatorService
         ];
     }
 
+    /** Delega para PricingEngine (fonte única de verdade), mantendo o contrato (float, nunca null) já usado pelo resto deste serviço. */
     private function breakEven(float $cost, float $imposto, float $mc, float $comissao, string $temFaixa): float
     {
-        $aliq = 1 - ($imposto + $mc + $comissao) / 100;
-        if ($aliq <= 0) return 0;
-        $base = $cost / $aliq;
-        if ($temFaixa === 'ml') {
-            if ($base < 12.5) return $base + $base / 2;
-            foreach (self::ML_TIER as $t) {
-                if (isset($t['fee']) && $base < $t['max']) return ($cost + $t['fee']) / $aliq;
-            }
-            return $base;
-        }
-        if ($temFaixa === 'shopee') {
-            foreach (self::SHOPEE_TIER as $t) {
-                if ($base <= $t['max']) return ($cost + $t['fee']) / $aliq;
-            }
-            return $base;
-        }
-        return $base;
+        return $this->pricingEngine->tieredBreakEven($cost, $imposto + $mc + $comissao, $temFaixa) ?? 0.0;
     }
 
     private function promoSugerido(float $pv, float $eq, float $descAtual, float $descEquil, float $rounding): float
     {
-        $p1 = floor($pv * (1 - $descAtual / 100) - $rounding) + $rounding;
-        $p2 = $eq * (1 - $descEquil / 100);
-        return max($p1, $p2);
+        return $this->pricingEngine->suggestedPromoPrice($pv, $eq, $descAtual, $descEquil, $rounding);
     }
 
     private function margem(float $pv, float $custo, float $encargos): float
     {
-        return $pv - $pv * ($encargos / 100) - $custo;
+        return $this->pricingEngine->unitContribution($pv, $custo, $encargos);
     }
 
     private function tempoEstoque(string $sku, $launchedAt, Carbon $now): string

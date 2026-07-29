@@ -11,8 +11,14 @@ use Illuminate\Support\Facades\Schema;
  *
  * Travas obrigatórias (todas verificadas por produto, e o motivo do bloqueio
  * fica registrado na auditoria):
- *   1. PISO: custo + margem mínima da MARCA (fallback: margem global).
- *      Nunca sugere preço abaixo do piso.
+ *   1. PISO: consumido do App\Services\PricingEngine — custo + ENCARGOS DO
+ *      CANAL (comissão do canal de venda do produto + imposto global) +
+ *      margem mínima da MARCA (fallback: margem global). Nunca sugere preço
+ *      abaixo do piso.
+ *      ⚠️ Correção: a versão anterior calculava `custo × (1 + margem)`,
+ *      ignorando os encargos do canal — com comissão de ~22%, esse "piso"
+ *      ficava ABAIXO do ponto de equilíbrio real e autorizava venda no
+ *      prejuízo (ver PricingEngineTest::test_old_buggy_floor_formula...).
  *   2. FRESCOR: ignora produto sem preço de mercado ou com dado mais antigo
  *      que `max_age_hours`.
  *   3. VARIAÇÃO MÁXIMA: alteração acima de `max_change_pct` não é aplicada
@@ -26,6 +32,12 @@ use Illuminate\Support\Facades\Schema;
  */
 class RepricingEngine
 {
+    public function __construct(
+        private PricingEngine $pricingEngine,
+        private ChannelConfigService $channelConfig
+    ) {
+    }
+
     public const DEFAULTS = [
         'repricing_enabled' => false,  // trava mestra
         'dry_run' => true,             // por padrão só simula
@@ -82,6 +94,49 @@ class RepricingEngine
     }
 
     /**
+     * Mapa `selling_channel` (normalizado) -> comissão % do canal, a partir
+     * da config de canais da empresa (a mesma fonte do Cálculo Promo).
+     * Também devolve o imposto global — os dois juntos formam os "encargos"
+     * exigidos por PricingEngine::floorPrice().
+     */
+    private function channelCharges(int $companyId): array
+    {
+        $config = $this->channelConfig->forCompany($companyId);
+        $imposto = (float) ($config['imposto'] ?? 0);
+
+        $comissoes = [];
+        foreach ($config['channels'] ?? [] as $ch) {
+            $key = mb_strtolower(trim((string) ($ch['id'] ?? '')));
+            $label = mb_strtolower(trim((string) ($ch['label'] ?? '')));
+            $comissao = (float) ($ch['comissao'] ?? 0);
+            if ($key !== '') $comissoes[$key] = $comissao;
+            if ($label !== '') $comissoes[$label] = $comissao;
+        }
+
+        return ['imposto' => $imposto, 'comissoes' => $comissoes];
+    }
+
+    /**
+     * Encargos totais (%) para o canal de venda de um produto: comissão do
+     * canal (casada por `selling_channel`, com fallback para a comissão
+     * média cadastrada) + imposto global.
+     *
+     * O Buy Box hoje só cobre a Netshoes (ver NetshoesBuyBoxScraper) — por
+     * isso, sem `selling_channel` reconhecido, cai no fallback "netshoes".
+     */
+    private function resolveCharges(array $channelData, ?string $sellingChannel): float
+    {
+        $comissoes = $channelData['comissoes'];
+        $key = mb_strtolower(trim((string) $sellingChannel));
+
+        $comissao = $comissoes[$key]
+            ?? $comissoes['netshoes']
+            ?? (!empty($comissoes) ? array_sum($comissoes) / count($comissoes) : 0.0);
+
+        return $comissao + $channelData['imposto'];
+    }
+
+    /**
      * Monta o plano: o que MUDARIA, com o motivo de cada bloqueio.
      * Não altera nada — é a base tanto do dry-run quanto da aplicação.
      */
@@ -95,9 +150,10 @@ class RepricingEngine
 
         $eff = $this->effSql();
         $margins = $this->brandMargins($companyId);
+        $channelData = $this->channelCharges($companyId);
 
         $sel = ['id', DB::raw("$eff as preco")];
-        foreach (['sku', 'brand', 'market_price', 'market_seller', 'market_source',
+        foreach (['sku', 'brand', 'market_price', 'market_seller', 'market_source', 'selling_channel',
                   'market_checked_at', 'cost_price', 'buybox_winner', 'stock_quantity'] as $c) {
             if ($this->has($c)) {
                 $sel[] = $c;
@@ -133,7 +189,10 @@ class RepricingEngine
                 ? $margins[mb_strtolower(trim($marca))]
                 : (float) $cfg['min_margin'];
 
-            $piso = ($custo && $custo > 0) ? round($custo * (1 + $margem / 100), 2) : null;
+            $encargos = $this->resolveCharges($channelData, $r->selling_channel ?? null);
+            $piso = ($custo && $custo > 0)
+                ? $this->pricingEngine->floorPrice($custo, $encargos, $margem)
+                : null;
             $novo = round(max(0.01, $mkt - (float) $cfg['undercut']), 2);
             $variacao = $preco > 0 ? abs(($novo - $preco) / $preco * 100) : 0;
 
@@ -151,11 +210,14 @@ class RepricingEngine
                 $idade = round((time() - strtotime((string) $r->market_checked_at)) / 3600);
                 $bloqueio = "Preço de mercado desatualizado ({$idade}h > {$cfg['max_age_hours']}h).";
             }
-            // Trava 1: piso de custo + margem
+            // Trava 1: piso de custo + encargos do canal + margem
             elseif ($piso === null) {
                 $bloqueio = 'Sem custo cadastrado — não dá para garantir a margem.';
             } elseif ($novo < $piso) {
-                $bloqueio = sprintf('Abaixo do piso (R$ %.2f, margem %.1f%% da marca).', $piso, $margem);
+                $bloqueio = sprintf(
+                    'Abaixo do piso (R$ %.2f = custo + %.1f%% de encargos do canal + %.1f%% de margem da marca).',
+                    $piso, $encargos, $margem
+                );
             }
             // Trava 3: variação máxima
             elseif ($variacao > (float) $cfg['max_change_pct']) {
@@ -177,6 +239,7 @@ class RepricingEngine
                 'novo' => $novo,
                 'variacao' => round($variacao, 1),
                 'custo' => $custo,
+                'encargos' => $encargos,
                 'piso' => $piso,
                 'margem' => $margem,
                 'fonte' => $fonte,

@@ -132,7 +132,7 @@
                                 <h4 :class="['text-3xl font-bold', result.recommendation === 'Positiva' ? 'text-emerald-700' : 'text-red-700']">
                                     {{ result.recommendation }}
                                 </h4>
-                                <p class="text-[10px] mt-4 font-bold uppercase opacity-60">Probabilidade de Sucesso: 84%</p>
+                                <p class="text-[10px] mt-4 font-bold uppercase opacity-60">Baseado no histórico de vendas dos últimos 30 dias</p>
                             </div>
                         </div>
 
@@ -159,8 +159,8 @@
                                                 </span>
                                             </div>
                                             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                                <div :class="[result.simulated.margin > result.current.margin ? 'bg-emerald-500' : 'bg-red-500']" 
-                                                     :style="{ width: (result.simulated.margin / result.current.margin * 100) + '%' }"></div>
+                                                <div :class="[result.simulated.margin > result.current.margin ? 'bg-emerald-500' : 'bg-red-500']"
+                                                     :style="{ width: marginBarWidth + '%' }"></div>
                                             </div>
                                         </div>
                                     </div>
@@ -239,6 +239,14 @@ const formatCurrency = (value) => {
         maximumFractionDigits: 2 
     }).format(value || 0);
 };
+
+const marginBarWidth = computed(() => {
+    if (!result.value) return 0;
+    const current = result.value.current.margin;
+    const simulated = result.value.simulated.margin;
+    if (!current || current <= 0) return simulated > 0 ? 100 : 0;
+    return Math.min(Math.max((simulated / current) * 100, 0), 100);
+});
 
 const simulationInsight = computed(() => {
     if (!result.value) return '';

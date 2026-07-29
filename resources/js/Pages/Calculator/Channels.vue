@@ -55,6 +55,11 @@
                     <p>Informe o custo do produto para calcular o retorno em cada canal.</p>
                 </div>
 
+                <div v-else-if="loading && !rows.length" class="text-center text-slate-400 py-12">
+                    <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i>
+                    <p>Calculando…</p>
+                </div>
+
                 <div v-else class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
@@ -94,15 +99,17 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, watch, onBeforeUnmount } from 'vue';
+import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
+
+// Todo o cálculo (equilíbrio, meta, promo, margem) vem do backend
+// (App\Services\PricingEngine) — este componente não reimplementa nenhuma
+// fórmula, só envia os inputs (com debounce) e renderiza o resultado.
 
 const props = defineProps({
     defaults: { type: Object, required: true },
 });
-
-const ML_TIER = [{ max: 12.5, mode: 'half' }, { max: 29, fee: 6.25 }, { max: 50, fee: 6.5 }, { max: 79, fee: 6.75 }, { max: Infinity, fee: 0 }];
-const SHOPEE_TIER = [{ max: 79.99, fee: 4 }, { max: 99.99, fee: 16 }, { max: 199.99, fee: 20 }, { max: Infinity, fee: 26 }];
 
 const custo = ref(null);
 const preco = ref(null);
@@ -115,50 +122,48 @@ const channels = reactive(props.defaults.channels.map(c => ({
     descAtual: c.descAtual, descEquil: c.descEquil,
 })));
 
-function pontoEquilibrio(cost, imp, m, comm, temFaixa) {
-    const aliq = 1 - (imp + m + comm) / 100;
-    if (aliq <= 0) return null;
-    const base = cost / aliq;
-    if (temFaixa === 'ml') {
-        if (base < 12.5) return base + base / 2;
-        for (const t of ML_TIER) { if (t.fee != null && base < t.max) return (cost + t.fee) / aliq; }
-        return base;
+const rows = ref([]);
+const loading = ref(false);
+let debounceTimer = null;
+let requestSeq = 0;
+
+function scheduleCompute() {
+    clearTimeout(debounceTimer);
+    if (!custo.value || custo.value <= 0) {
+        rows.value = [];
+        return;
     }
-    if (temFaixa === 'shopee') {
-        for (const t of SHOPEE_TIER) { if (base <= t.max) return (cost + t.fee) / aliq; }
-        return base;
-    }
-    return base;
-}
-function promoSugerido(pv, equil, descAtual, descEquil) {
-    if (pv == null || pv === 0 || equil == null) return null;
-    const p1 = Math.floor(pv * (1 - descAtual / 100) - 0.9) + 0.9;
-    const p2 = equil * (1 - descEquil / 100);
-    return Math.max(p1, p2);
-}
-function margemUnit(pv, cost, imp, m, comm) {
-    if (pv == null || pv === 0) return null;
-    return pv - pv * ((imp + m + comm) / 100) - cost;
+    loading.value = true;
+    debounceTimer = setTimeout(runCompute, 300);
 }
 
-const rows = computed(() => {
-    const cost = custo.value || 0;
-    const pv = preco.value || null;
-    return channels.map(ch => {
-        const equil = cost > 0 ? pontoEquilibrio(cost, imposto.value, mc.value, ch.comissao, ch.temFaixa) : null;
-        const meta = equil != null ? equil * (1 + markup.value / 100) : null;
-        const promo = pv ? promoSugerido(pv, equil, ch.descAtual, ch.descEquil) : null;
-        const margem = pv ? margemUnit(pv, cost, imposto.value, mc.value, ch.comissao) : null;
-        const margemPct = (margem != null && pv) ? margem / pv * 100 : null;
-        let status = '—', statusClass = 'pill-idle';
-        if (pv && margem != null) {
-            if (margem < 0) { status = 'Prejuízo'; statusClass = 'pill-red'; }
-            else if (equil != null && pv < equil) { status = 'Abaixo eq.'; statusClass = 'pill-amber'; }
-            else { status = 'Lucro'; statusClass = 'pill-green'; }
+async function runCompute() {
+    const seq = ++requestSeq;
+    try {
+        const { data } = await axios.post(route('calculator.compute'), {
+            custo: custo.value,
+            preco: preco.value,
+            imposto: imposto.value,
+            mc: mc.value,
+            markup: markup.value,
+            channels: channels.map(c => ({ ...c })),
+        }, {
+            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '' },
+        });
+        if (seq === requestSeq) {
+            rows.value = data.rows;
         }
-        return { ...ch, equilibrio: equil, meta, promo, margem, margemPct, status, statusClass };
-    });
-});
+    } catch (e) {
+        // Falha de transporte (ex.: sessão expirada) não deve mostrar dado
+        // errado — apenas mantém o último resultado válido em tela.
+        console.error('Falha ao calcular retorno por canal:', e);
+    } finally {
+        if (seq === requestSeq) loading.value = false;
+    }
+}
+
+watch([custo, preco, imposto, mc, markup, () => channels.map(c => c.comissao)], scheduleCompute, { deep: true });
+onBeforeUnmount(() => clearTimeout(debounceTimer));
 
 function marginClass(v) {
     if (v == null) return 'text-slate-300';

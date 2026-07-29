@@ -136,13 +136,4 @@ class ProductController extends Controller
         }
     }
 
-    public function customers()
-    {
-        // Placeholder para evitar erro de rota
-        return \Inertia\Inertia::render('Dashboard', [
-            'salesToday' => 0,
-            'ordersCountToday' => 0,
-            'salesMonth' => 0
-        ]);
-    }
 }

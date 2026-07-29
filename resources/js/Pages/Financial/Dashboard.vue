@@ -26,8 +26,13 @@
                     <p class="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Faturamento Bruto</p>
                     <h3 class="text-3xl font-black text-slate-900">R$ {{ formatCurrency(stats.grossRevenue) }}</h3>
                     <div class="mt-4 flex items-center gap-2">
-                        <span class="text-emerald-600 text-xs font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                            +12.5% vs mês ant.
+                        <span v-if="revenueGrowthPct !== null"
+                              class="text-xs font-bold px-2 py-0.5 rounded-full border"
+                              :class="revenueGrowthPct >= 0 ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-red-600 bg-red-50 border-red-100'">
+                            {{ revenueGrowthPct >= 0 ? '+' : '' }}{{ revenueGrowthPct.toFixed(1) }}% vs mês ant.
+                        </span>
+                        <span v-else class="text-slate-400 text-xs font-medium bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100" title="dados insuficientes">
+                            — vs mês ant.
                         </span>
                     </div>
                 </div>
@@ -40,7 +45,10 @@
                     <p class="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Custos Fixos</p>
                     <h3 class="text-3xl font-black text-slate-900">R$ {{ formatCurrency(stats.fixedExpenses) }}</h3>
                     <div class="mt-4 flex items-center gap-2">
-                        <span class="text-slate-400 text-xs font-medium">Equivale a {{ ((stats.fixedExpenses / stats.grossRevenue) * 100).toFixed(1) }}% da receita</span>
+                        <span v-if="stats.grossRevenue > 0" class="text-slate-400 text-xs font-medium">
+                            Equivale a {{ ((stats.fixedExpenses / stats.grossRevenue) * 100).toFixed(1) }}% da receita
+                        </span>
+                        <span v-else class="text-slate-400 text-xs font-medium" title="dados insuficientes">—</span>
                     </div>
                 </div>
 
@@ -50,9 +58,9 @@
                         <i class="fa-solid fa-chart-pie text-5xl text-indigo-600"></i>
                     </div>
                     <p class="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Margem Contr.</p>
-                    <h3 class="text-3xl font-black text-slate-900">{{ stats.contributionMargin.toFixed(1) }}%</h3>
+                    <h3 class="text-3xl font-black text-slate-900">{{ (stats.contributionMargin ?? 0).toFixed(1) }}%</h3>
                     <div class="mt-4 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                        <div class="h-full bg-indigo-600" :style="{ width: stats.contributionMargin + '%' }"></div>
+                        <div class="h-full bg-indigo-600" :style="{ width: Math.min(Math.max(stats.contributionMargin ?? 0, 0), 100) + '%' }"></div>
                     </div>
                 </div>
 
@@ -110,10 +118,14 @@
                         </div>
                     </div>
 
-                    <div class="mt-8 p-6 bg-blue-50 border border-blue-100 rounded-2xl">
-                        <p class="text-sm font-medium text-blue-700">
+                    <div class="mt-8 p-6 rounded-2xl border" :class="marginDeltaVsHistoryPct !== null ? 'bg-blue-50 border-blue-100' : 'bg-slate-50 border-slate-100'">
+                        <p v-if="marginDeltaVsHistoryPct !== null" class="text-sm font-medium text-blue-700">
                             <i class="fa-solid fa-circle-info mr-2"></i>
-                            Sua margem está 4% acima da média do setor este mês.
+                            Sua margem está {{ Math.abs(marginDeltaVsHistoryPct).toFixed(1) }} p.p. {{ marginDeltaVsHistoryPct >= 0 ? 'acima' : 'abaixo' }} da sua própria média dos últimos meses.
+                        </p>
+                        <p v-else class="text-sm font-medium text-slate-400" title="dados insuficientes">
+                            <i class="fa-solid fa-circle-info mr-2"></i>
+                            Dados insuficientes para comparar sua margem com o histórico.
                         </p>
                     </div>
                 </div>
@@ -128,7 +140,9 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 defineProps({
     stats: Object,
     history: Array,
-    companyName: String
+    companyName: String,
+    revenueGrowthPct: { type: Number, default: null },
+    marginDeltaVsHistoryPct: { type: Number, default: null },
 });
 
 const formatCurrency = (value) => {

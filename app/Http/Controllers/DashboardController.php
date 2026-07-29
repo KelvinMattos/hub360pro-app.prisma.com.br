@@ -62,7 +62,9 @@ class DashboardController extends Controller
             if (!$totalCol) return $empty;
             $statusCol = $has('status') ? 'status' : null;
             $channelCol = $has('selling_channel') ? 'selling_channel' : null;
-            $dateCol = $has('created_at') ? 'created_at' : ($has('date_created') ? 'date_created' : null);
+            // date_created é a data real do pedido; created_at é o timestamp da importação
+            // (ver CLAUDE.md §5.1) — usar created_at aqui jogaria vendas antigas no mês da importação.
+            $dateCol = $has('date_created') ? 'date_created' : ($has('order_date') ? 'order_date' : ($has('created_at') ? 'created_at' : null));
             $hasCompany = $has('company_id');
 
             $faturado = ['approved', 'paid', 'shipped', 'delivered', 'accredited'];
