@@ -13,3 +13,4 @@ Schedule::command('orders:sync')->hourly(); // Extrai todos os novos pedidos per
 Schedule::command('products:sync')->twiceDaily(4, 16); // Busca por inconsistências de produtos a cada 12h.
 Schedule::command('sku:classify-strategy')->daily(); // Recalcula a segmentação de SKU (papel, ciclo de vida, estoque, competitividade).
 Schedule::command('decision-cycles:tick')->daily(); // Avança ciclos de decisão em execução (freio, lote gradual, conclusão + ROI).
+Schedule::command('inventory:compute-replenishment')->daily(); // Recalcula velocidade, cobertura, status e quantidade sugerida de reposição.
