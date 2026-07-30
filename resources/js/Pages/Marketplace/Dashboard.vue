@@ -33,7 +33,12 @@
                             <p class="text-slate-400 text-[11px] font-black uppercase tracking-[0.2em] mb-4">Vendas Hoje</p>
                             <div class="flex items-end gap-3">
                                 <h3 class="text-4xl font-black text-slate-900 tracking-tighter">R$ {{ stats.sales_today.toLocaleString() }}</h3>
-                                <span class="text-emerald-500 text-xs font-black bg-emerald-500/10 px-2 py-1 rounded-lg mb-1">+{{ stats.growth_percent }}%</span>
+                                <span v-if="stats.growth_percent != null"
+                                    :class="stats.growth_percent >= 0 ? 'text-emerald-500 bg-emerald-500/10' : 'text-red-500 bg-red-500/10'"
+                                    class="text-xs font-black px-2 py-1 rounded-lg mb-1">
+                                    {{ stats.growth_percent >= 0 ? '+' : '' }}{{ stats.growth_percent }}%
+                                </span>
+                                <span v-else class="text-slate-400 text-xs font-black bg-slate-100 px-2 py-1 rounded-lg mb-1">— vs ontem</span>
                             </div>
                         </div>
 

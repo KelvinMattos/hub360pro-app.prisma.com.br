@@ -13,9 +13,12 @@ class ExpeditionController extends Controller
     {
         $companyId = Auth::user()->company_id;
 
-        // Pedidos aguardando expedição (status: paid or ready_to_ship)
+        // Pedidos aguardando expedição: confirmados mas ainda não enviados.
+        // 'approved' é o status que os importadores Magazord/Netshoes usam pra
+        // pedido pago/aprovado (ver Order::CONFIRMED_STATUSES) — sem ele, pedido
+        // vindo desses dois canais nunca aparecia na fila de expedição.
         $orders = Order::where('company_id', $companyId)
-            ->whereIn('status', ['paid', 'ready_to_ship'])
+            ->whereIn('status', ['paid', 'approved', 'ready_to_ship'])
             ->with('items.product')
             ->latest()
             ->get();

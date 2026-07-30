@@ -103,4 +103,25 @@ class InventoryIntelligenceServiceTest extends TestCase
             ->where('inventoryData.0.velocity', 0)
         );
     }
+
+    /**
+     * Reportado pelo cliente: Reposição Inteligente "não funciona". Causa real:
+     * o whitelist de status confirmado só tinha ['paid','shipped','delivered',
+     * 'accredited'] (vocabulário do Mercado Livre) — sem 'approved', que é o
+     * status que os importadores Magazord e Netshoes gravam pra pedido pago
+     * (ver Order::CONFIRMED_STATUSES). Toda venda vinda desses dois canais
+     * ficava de fora do cálculo de velocidade, mostrando "999 dias de estoque"
+     * mesmo pra produto vendendo bem.
+     */
+    public function test_approved_status_from_magazord_netshoes_counts_towards_velocity(): void
+    {
+        $this->insertOrderWithItem(['status' => 'approved', 'date_created' => now()->subDays(2)]);
+
+        $response = $this->actingAs($this->user)->get(route('inventory.planning'));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->where('inventoryData.0.velocity', 0.1)
+        );
+    }
 }

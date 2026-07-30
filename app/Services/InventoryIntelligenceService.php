@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Order;
 use App\Models\OrderItem;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
@@ -41,7 +42,7 @@ class InventoryIntelligenceService
                 ->where('order_items.product_id', $product->id)
                 ->where('orders.company_id', $companyId)
                 ->where("orders.$orderDateCol", '>=', $thirtyDaysAgo)
-                ->whereIn('orders.status', ['paid', 'shipped', 'delivered', 'accredited'])
+                ->whereIn('orders.status', Order::CONFIRMED_STATUSES)
                 ->sum('order_items.quantity');
 
             $dailyVelocity = $salesLast30Days / 30;
@@ -95,7 +96,7 @@ class InventoryIntelligenceService
                     ->where('order_items.product_id', $product->id)
                     ->where('orders.company_id', $companyId)
                     ->where("orders.$orderDateCol", '>=', $thirtyDaysAgo)
-                    ->whereIn('orders.status', ['paid', 'shipped', 'delivered', 'accredited'])
+                    ->whereIn('orders.status', Order::CONFIRMED_STATUSES)
                     ->sum('order_items.quantity');
 
                 $dailyVelocity = $salesLast30Days / 30;

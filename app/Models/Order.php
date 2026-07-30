@@ -6,6 +6,23 @@ use Illuminate\Database\Eloquent\Model;
 
 class Order extends Model
 {
+    /**
+     * Status que representam venda confirmada (conta em receita/velocidade/DRE).
+     *
+     * Incidente: o whitelist usado em vários lugares (InventoryIntelligenceService,
+     * FinancialProrationService, MarketplaceDashboardController, ...) tinha só
+     * ['paid','shipped','delivered','accredited'] — vocabulário do sync direto do
+     * Mercado Livre. Os importadores Magazord e Netshoes normalizam pedido
+     * aprovado/pago/faturado para 'approved' (ver mapStatus() nos dois
+     * controllers, e getStatusColorAttribute()/getStatusLabelAttribute() abaixo,
+     * que já tratavam 'approved' e 'paid' como equivalentes). Sem 'approved'
+     * aqui, a maioria das vendas reais (que vêm do Magazord/Netshoes, não do
+     * Mercado Livre) ficava de fora de todo cálculo de receita e de velocidade
+     * de venda — a Reposição Inteligente sempre mostrava "999 dias de estoque"
+     * mesmo para produtos vendendo bem.
+     */
+    public const CONFIRMED_STATUSES = ['approved', 'paid', 'confirmed', 'shipped', 'delivered', 'accredited'];
+
     protected $appends = [
         'safe_doc_number', 
         'safe_billing_name', 
