@@ -95,6 +95,9 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/calculo-promo', [CalculoPromoController::class , 'index'])->name('calculo-promo');
             Route::get('/calculo-promo/export', [CalculoPromoController::class , 'export'])->name('calculo-promo.export');
 
+            // Preços por Canal — preço de cada produto em cada canal, lado a lado
+            Route::get('/channel-prices', [\App\Http\Controllers\Pricing\ChannelPricesController::class , 'index'])->name('channel-prices');
+
             // Configuração de canais (comissões, taxas, markup) por empresa
             Route::get('/channels', [\App\Http\Controllers\Pricing\ChannelSettingsController::class , 'index'])->name('channels');
             Route::post('/channels', [\App\Http\Controllers\Pricing\ChannelSettingsController::class , 'update'])->name('channels.update');

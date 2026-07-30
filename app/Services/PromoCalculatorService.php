@@ -50,12 +50,16 @@ class PromoCalculatorService
         $hasChannelPrices = Schema::hasColumn('products', 'channel_prices');
         $hasPromo = Schema::hasColumn('products', 'promotional_price');
         $hasLaunch = Schema::hasColumn('products', 'launched_at');
+        $hasNetshoesPrice = Schema::hasColumn('products', 'netshoes_price');
+        $isSiteChannel = ($ch['id'] ?? '') === 'site';
+        $isNetshoesChannel = ($ch['id'] ?? '') === 'netshoes';
 
         $select = ['sku', 'title', 'stock_quantity', 'cost_price', 'sale_price'];
         if (Schema::hasColumn('products', 'brand')) $select[] = 'brand';
         if ($hasChannelPrices) $select[] = 'channel_prices';
         if ($hasPromo) $select[] = 'promotional_price';
         if ($hasLaunch) $select[] = 'launched_at';
+        if ($hasNetshoesPrice) $select[] = 'netshoes_price';
 
         $rows = DB::table('products')->where('company_id', $companyId)->select($select)->get();
         $now = Carbon::now();
@@ -67,12 +71,31 @@ class PromoCalculatorService
             $custo = (float) ($p->cost_price ?? 0);
             $saleBase = (float) ($p->sale_price ?? 0);
 
-            $pvAtual = $saleBase;
+            // Preço vinculado ao canal (só o que a planilha/import realmente
+            // preencheu para esse canal específico) — ver channel_prices.
+            $channelPrice = null;
             if ($hasChannelPrices && $col) {
                 $cp = json_decode($p->channel_prices ?? '', true);
                 if (is_array($cp) && isset($cp[$col]) && (float) $cp[$col] > 0) {
-                    $pvAtual = (float) $cp[$col];
+                    $channelPrice = (float) $cp[$col];
                 }
+            }
+            // Netshoes também aceita netshoes_price (import dedicado Importações
+            // Netshoes → Preços, que não passa por channel_prices).
+            if ($channelPrice === null && $isNetshoesChannel && $hasNetshoesPrice && (float) ($p->netshoes_price ?? 0) > 0) {
+                $channelPrice = (float) $p->netshoes_price;
+            }
+
+            if ($isSiteChannel) {
+                // Site é o preço base do catálogo — cai pro sale_price quando não
+                // há um channel_prices['Site'] específico (produto nunca passou
+                // pela planilha de preços, mas tem preço cadastrado normalmente).
+                $pvAtual = $channelPrice ?? $saleBase;
+                if ($pvAtual <= 0) continue; // sem preço nenhum, não aparece
+            } else {
+                // Canais de marketplace: só aparece SKU com vínculo real ao canal.
+                if ($channelPrice === null) continue;
+                $pvAtual = $channelPrice;
             }
 
             $pontoEq = $custo > 0 ? $this->breakEven($custo, $imposto, $mc, $comissao, $temFaixa) : null;

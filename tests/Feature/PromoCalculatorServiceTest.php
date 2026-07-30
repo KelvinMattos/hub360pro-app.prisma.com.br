@@ -71,4 +71,84 @@ class PromoCalculatorServiceTest extends TestCase
         $this->assertNull($row['ponto_equilibrio']);
         $this->assertNull($row['promo_sugerido']);
     }
+
+    /**
+     * Cliente pediu: ao mudar de canal, só aparecem SKUs com vínculo real
+     * àquele canal (channel_prices preenchido) — sem vínculo, não aparece.
+     * Antes, qualquer canal sem preço específico caía pro sale_price base,
+     * fazendo TODO produto aparecer em TODO canal.
+     */
+    public function test_only_products_linked_to_the_channel_appear_for_marketplace_channels(): void
+    {
+        $companyId = DB::table('companies')->insertGetId(['name' => 'Empresa3', 'created_at' => now(), 'updated_at' => now()]);
+
+        DB::table('products')->insert([
+            'company_id' => $companyId, 'sku' => 'COM-VINCULO', 'title' => 'Vendido no ML',
+            'cost_price' => 50, 'sale_price' => 150, 'stock_quantity' => 3,
+            'channel_prices' => json_encode(['Mercado Livre' => 180.00]),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('products')->insert([
+            'company_id' => $companyId, 'sku' => 'SEM-VINCULO', 'title' => 'Só vendido no site',
+            'cost_price' => 50, 'sale_price' => 150, 'stock_quantity' => 3,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $cfg = CalculoPromoController::defaultConfig();
+        $result = app(PromoCalculatorService::class)->compute($companyId, $cfg, 'ml_classico');
+
+        $skus = collect($result['rows'])->pluck('sku')->all();
+        $this->assertContains('COM-VINCULO', $skus);
+        $this->assertNotContains('SEM-VINCULO', $skus);
+
+        $row = collect($result['rows'])->firstWhere('sku', 'COM-VINCULO');
+        $this->assertSame(180.0, $row['pv_atual']);
+    }
+
+    public function test_site_channel_still_falls_back_to_base_sale_price_without_regression(): void
+    {
+        $companyId = DB::table('companies')->insertGetId(['name' => 'Empresa4', 'created_at' => now(), 'updated_at' => now()]);
+
+        DB::table('products')->insert([
+            'company_id' => $companyId, 'sku' => 'SO-SALE-PRICE', 'title' => 'Sem channel_prices',
+            'cost_price' => 50, 'sale_price' => 150, 'stock_quantity' => 3,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $cfg = CalculoPromoController::defaultConfig();
+        $result = app(PromoCalculatorService::class)->compute($companyId, $cfg, 'site');
+
+        $row = collect($result['rows'])->firstWhere('sku', 'SO-SALE-PRICE');
+        $this->assertNotNull($row);
+        $this->assertSame(150.0, $row['pv_atual']);
+    }
+
+    public function test_netshoes_channel_accepts_dedicated_netshoes_price_field(): void
+    {
+        $companyId = DB::table('companies')->insertGetId(['name' => 'Empresa5', 'created_at' => now(), 'updated_at' => now()]);
+
+        // Produto sincronizado só pelo importador dedicado (Importações Netshoes
+        // -> Preços), sem passar pela planilha Magazord (sem channel_prices).
+        DB::table('products')->insert([
+            'company_id' => $companyId, 'sku' => 'NETSHOES-DEDICADO', 'title' => 'Netshoes via importador dedicado',
+            'cost_price' => 50, 'sale_price' => 150, 'stock_quantity' => 3,
+            'netshoes_price' => 199.90,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('products')->insert([
+            'company_id' => $companyId, 'sku' => 'SEM-NETSHOES', 'title' => 'Não vendido na Netshoes',
+            'cost_price' => 50, 'sale_price' => 150, 'stock_quantity' => 3,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $cfg = CalculoPromoController::defaultConfig();
+        $result = app(PromoCalculatorService::class)->compute($companyId, $cfg, 'netshoes');
+
+        $skus = collect($result['rows'])->pluck('sku')->all();
+        $this->assertContains('NETSHOES-DEDICADO', $skus);
+        $this->assertNotContains('SEM-NETSHOES', $skus);
+
+        $row = collect($result['rows'])->firstWhere('sku', 'NETSHOES-DEDICADO');
+        $this->assertSame(199.9, $row['pv_atual']);
+    }
 }
