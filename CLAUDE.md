@@ -100,6 +100,30 @@ Bloqueio → trocar por canal autorizado (API oficial / relatório do Seller Cen
 - Assets **buildados entram no commit** (`public/build` versionado).
 - Sempre `php -l` nos arquivos PHP e `npm run build` antes de commitar.
 
+### 3.1 Autorização permanente: corrigir e mergear sem perguntar (desde 30/07/2026)
+
+O cliente pediu explicitamente, e confirmou como regra permanente: **sempre que
+encontrar algo errado no sistema, corrigir, e ao final mandar tudo para a `main`** —
+sem precisar abrir PR e esperar aprovação item a item. Isso substitui, daqui pra
+frente, a antiga exigência de "abra a PR e me diga o número que eu verifico" que
+valia para o diagnóstico do PR #9.
+
+- Fluxo padrão passa a ser: commit → push → PR → **squash-merge direto na `main`**,
+  sem pausa para aprovação — desde que a suíte de testes (MySQL real) esteja verde e
+  `php -l`/`npm run build` limpos.
+- O cliente também pediu **auditoria mais ampla por conta própria daqui pra frente** —
+  não ficar restrito só ao que foi explicitamente apontado; ao mexer em qualquer
+  área, vale revisar o entorno em busca de outros problemas reais (validando contra
+  código/dado real, nunca por suposição — ver §2.4) e corrigir também.
+- **Isso NÃO suspende nenhuma regra de segurança da seção 2** — piso de repricing,
+  `dry_run`/`repricing_enabled` desligados por padrão, nunca contornar bloqueio de
+  terceiros, nunca commitar segredo, nunca rodar `catalog:reset` ou operação
+  destrutiva sem confirmação explícita continuam valendo exatamente como antes.
+  A autorização é para **corrigir bugs e mergear**, não para automação de risco.
+- O deploy em si continua manual (`bash deploy.sh` no cPanel) — merge na `main`
+  dispara o workflow, que hoje falha de propósito porque os secrets de SSH nunca
+  foram configurados (ver §2.1).
+
 ---
 
 ## 4. Resiliência de schema (crítico)
