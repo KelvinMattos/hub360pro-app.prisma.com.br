@@ -8,6 +8,17 @@ class Integration extends Model
 {
     protected $table = 'integrations';
 
+    /**
+     * Valor canônico de `platform` para Mercado Livre. Incidente: o OAuth
+     * (SettingsController::handleMeliCallback) gravava 'mercadolivre' para a
+     * credencial por conta enquanto o restante do fluxo (redirectToMeli,
+     * MeliRefreshTokenCommand, SyncProductsCommand, etc.) buscava
+     * 'mercadolibre' — a mesma tela de conexão gerava duas grafias
+     * diferentes para o mesmo marketplace, e qualquer leitura por valor
+     * exato só enxergava metade das integrações.
+     */
+    public const PLATFORM_MERCADO_LIVRE = 'mercadolibre';
+
     protected $fillable = [
         'company_id',
         'platform',
@@ -33,8 +44,14 @@ class Integration extends Model
         'reputation_metrics'
     ];
 
+    // access_token/refresh_token do Mercado Livre estavam indo pro navegador —
+    // Integration::get() é serializado direto como prop do Inertia em
+    // MarketplaceListingController::index() sem select nem Resource, então
+    // qualquer campo não escondido aqui vaza no HTML/JSON da página.
     protected $hidden = [
         'client_secret',
+        'access_token',
+        'refresh_token',
     ];
 
     protected $casts = [

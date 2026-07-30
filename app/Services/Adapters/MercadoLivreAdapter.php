@@ -84,16 +84,7 @@ class MercadoLivreAdapter implements MarketplaceAdapter
 
     public function fetchProducts(Integration $credential)
     {
-        $response = $this->request($credential, 'get', "/users/{$credential->seller_id}/items/search", [
-            'status' => 'active',
-            'limit' => 100,
-        ]);
-
-        if ($response->failed()) {
-            return [];
-        }
-
-        $itemIds = $response->json()['results'] ?? [];
+        $itemIds = $this->fetchAllItemIds($credential);
         if (empty($itemIds)) return [];
 
         $chunks = array_chunk($itemIds, 20);
@@ -148,6 +139,58 @@ class MercadoLivreAdapter implements MarketplaceAdapter
         }
 
         return $products;
+    }
+
+    /**
+     * Pagina TODOS os item IDs do vendedor via scroll (search_type=scan + scroll_id).
+     *
+     * /users/{id}/items/search no modo tradicional (offset+limit) trava em
+     * offset+limit <= 1000 — inútil para catálogos grandes (contas com 30k+
+     * SKUs nunca passariam dos primeiros 1000). O modo scroll não tem esse
+     * teto: a 1ª chamada manda search_type=scan sem scroll_id, a resposta
+     * traz um scroll_id, e cada chamada seguinte manda esse scroll_id de
+     * volta até vir uma página vazia.
+     *
+     * Guarda de segurança: para depois de MAX_SCROLL_PAGES páginas mesmo que
+     * a API continue mandando scroll_id, para nunca entrar em loop infinito
+     * por um comportamento inesperado da API externa.
+     */
+    private const MAX_SCROLL_PAGES = 500; // 500 x 100 = 50.000 itens de teto
+
+    protected function fetchAllItemIds(Integration $credential): array
+    {
+        $itemIds = [];
+        $scrollId = null;
+        $pages = 0;
+
+        do {
+            $params = [
+                'status' => 'active',
+                'search_type' => 'scan',
+                'limit' => 100,
+            ];
+            if ($scrollId !== null) {
+                $params['scroll_id'] = $scrollId;
+            }
+
+            $response = $this->request($credential, 'get', "/users/{$credential->seller_id}/items/search", $params);
+            if ($response->failed()) {
+                Log::error("MercadoLivreAdapter::fetchAllItemIds falhou (credential #{$credential->id}, página {$pages}): HTTP {$response->status()}");
+                break;
+            }
+
+            $body = $response->json();
+            $results = $body['results'] ?? [];
+            if (empty($results)) {
+                break;
+            }
+
+            $itemIds = array_merge($itemIds, $results);
+            $scrollId = $body['scroll_id'] ?? null;
+            $pages++;
+        } while ($scrollId !== null && $pages < self::MAX_SCROLL_PAGES);
+
+        return $itemIds;
     }
 
     public function getShipmentLabel(Integration $credential, string $shippingId)

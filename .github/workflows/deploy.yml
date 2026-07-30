@@ -1,15 +1,26 @@
 name: Deploy (SSH)
 
 # Deploy automático no push para a main (e botão manual em Actions).
-# Só roda de verdade quando os secrets de SSH estiverem configurados no repo:
-#   Settings > Secrets and variables > Actions:
-#     SSH_HOST     host/servidor cPanel (ex.: 187.x.x.x ou seu domínio)
-#     SSH_USER     usuário cPanel/SSH
-#     SSH_KEY      chave privada SSH (conteúdo completo) — recomendado
-#     SSH_PORT     porta SSH (opcional; padrão 22)
-#     APP_PATH     caminho da app no servidor (ex.: /home/kelvi593/app.prismaads.com.br)
+#
+# Secrets necessários (Settings > Secrets and variables > Actions):
+#   SSH_HOST     host/servidor cPanel (ex.: 187.x.x.x ou seu domínio)
+#   SSH_USER     usuário cPanel/SSH
+#   SSH_KEY      chave privada SSH (conteúdo completo) — recomendado
+#   SSH_PORT     porta SSH (opcional; padrão 22)
+#   APP_PATH     caminho da app no servidor (ex.: /home/kelvi593/app.prismaads.com.br)
 #
 # Os secrets ficam só no GitHub — nunca no código.
+#
+# INCIDENTE (30/07/2026): este workflow reportava "success" em TODO push,
+# mesmo sem nenhum secret configurado — o passo de deploy era pulado e o
+# passo de fallback ("SSH não configurado") sempre concluía com sucesso.
+# Resultado: os PRs #7 e #8 foram mergeados e o Actions mostrou verde, mas o
+# servidor ficou 2 PRs atrasado até alguém rodar `bash deploy.sh` manualmente.
+# Corrigido para: (1) falhar alto se os secrets não estiverem configurados,
+# em vez de "sucesso" silencioso; (2) chamar o deploy.sh já existente (que
+# já usa git fetch + merge --ff-only + set -euo pipefail) em vez de duplicar
+# um `git pull` frágil dentro do YAML; (3) conferir o SHA no servidor contra
+# o SHA que disparou o workflow, e falhar se não bater.
 
 on:
   push:
@@ -20,12 +31,19 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checar se o SSH está configurado
-        id: cfg
-        run: echo "ready=${{ secrets.SSH_HOST != '' && secrets.APP_PATH != '' }}" >> "$GITHUB_OUTPUT"
+      - name: Falhar se os secrets de SSH não estiverem configurados
+        run: |
+          missing=""
+          [ -z "${{ secrets.SSH_HOST }}" ] && missing="$missing SSH_HOST"
+          [ -z "${{ secrets.SSH_USER }}" ] && missing="$missing SSH_USER"
+          [ -z "${{ secrets.SSH_KEY }}" ] && missing="$missing SSH_KEY"
+          [ -z "${{ secrets.APP_PATH }}" ] && missing="$missing APP_PATH"
+          if [ -n "$missing" ]; then
+            echo "::error::Secrets de SSH ausentes:$missing — o deploy automático está desligado de propósito até serem configurados em Settings > Secrets and variables > Actions. Até lá, rode 'bash deploy.sh' manualmente no Terminal do cPanel."
+            exit 1
+          fi
 
-      - name: Deploy via SSH
-        if: steps.cfg.outputs.ready == 'true'
+      - name: Deploy via SSH (chama deploy.sh no servidor)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -33,16 +51,16 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            set -e
+            set -euo pipefail
             cd "${{ secrets.APP_PATH }}"
-            git pull origin main
-            PHP=$(command -v php || echo /usr/local/bin/php)
-            $PHP composer.phar install --no-dev --optimize-autoloader --no-interaction || true
-            $PHP artisan migrate --force
-            $PHP artisan optimize:clear
-            $PHP artisan storage:link || true
-            echo "Deploy concluído."
+            bash deploy.sh
 
-      - name: SSH não configurado (ignorando)
-        if: steps.cfg.outputs.ready != 'true'
-        run: echo "Secrets de SSH ausentes — pulei o deploy. Configure SSH_HOST e APP_PATH para habilitar."
+            DEPLOYED_SHA="$(git rev-parse HEAD)"
+            EXPECTED_SHA="${{ github.sha }}"
+            echo "SHA no servidor após deploy: $DEPLOYED_SHA"
+            echo "SHA esperado (commit que disparou este workflow): $EXPECTED_SHA"
+            if [ "$DEPLOYED_SHA" != "$EXPECTED_SHA" ]; then
+              echo "::error::deploy.sh terminou sem erro, mas o servidor ficou em $DEPLOYED_SHA em vez de $EXPECTED_SHA — não trate isso como deploy bem-sucedido."
+              exit 1
+            fi
+            echo "Deploy confirmado: servidor em $DEPLOYED_SHA."

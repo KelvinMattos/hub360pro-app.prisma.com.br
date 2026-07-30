@@ -109,13 +109,11 @@ const props = defineProps({
 
 const selectedCredential = ref('');
 
+// Sem conta selecionada, "Sincronizar Tudo" sincroniza todas as contas ativas
+// (o próprio texto do botão) — o backend trata credential_id nulo assim.
 const syncListings = () => {
-    if (!selectedCredential.value) {
-        alert('Selecione uma conta para sincronizar.');
-        return;
-    }
     router.post(route('marketplaces.listings.sync'), {
-        credential_id: selectedCredential.value
+        credential_id: selectedCredential.value || null
     });
 };
 </script>
