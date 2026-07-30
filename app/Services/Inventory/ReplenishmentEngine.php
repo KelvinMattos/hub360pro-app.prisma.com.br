@@ -250,10 +250,16 @@ class ReplenishmentEngine
         $d90 = $now->copy()->subDays(90)->startOfDay();
         $dDead = $now->copy()->subDays($deadStockDays)->startOfDay();
 
+        // Nunca usar whereIn(product_id, $productIds) aqui: com o catálogo inteiro (78 mil SKUs)
+        // isso vira um whereIn com 78 mil placeholders e estoura o limite do MySQL (65535,
+        // erro 1390 "too many placeholders" — bug real reportado em produção). O join com
+        // `products` filtrado por company_id já restringe ao tenant certo sem passar lista
+        // nenhuma como parâmetro — a query fica O(vendas na janela), não O(SKUs do catálogo).
         $rows = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->join('products', 'products.id', '=', 'order_items.product_id')
             ->where('orders.company_id', $companyId)
-            ->whereIn('order_items.product_id', $productIds)
+            ->where('products.company_id', $companyId)
             ->whereIn('orders.status', Order::CONFIRMED_STATUSES)
             ->where("orders.$dateCol", '>=', $windowStart)
             ->select('order_items.product_id', "orders.$dateCol as odate", 'order_items.quantity', 'order_items.unit_price')
