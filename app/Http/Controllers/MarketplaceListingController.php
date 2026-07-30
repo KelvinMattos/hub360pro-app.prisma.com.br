@@ -158,17 +158,55 @@ class MarketplaceListingController extends Controller
         return redirect()->back()->with('success', 'Alteração revertida com sucesso.');
     }
 
+    /**
+     * "Sincronizar Tudo" — sem conta selecionada (credential_id nulo), sincroniza
+     * TODAS as integrações ativas da empresa (o próprio texto do botão diz
+     * "Tudo"); com uma conta selecionada, sincroniza só ela.
+     */
     public function sync(Request $request)
     {
         $request->validate([
-            'credential_id' => 'required|exists:integrations,id',
+            'credential_id' => 'nullable|exists:integrations,id',
         ]);
 
-        $credential = Integration::where('company_id', Auth::user()->company_id)
-            ->findOrFail($request->credential_id);
+        $companyId = Auth::user()->company_id;
 
-        $this->service->syncListings($credential);
+        $credentials = $request->credential_id
+            ? collect([Integration::where('company_id', $companyId)->findOrFail($request->credential_id)])
+            : Integration::where('company_id', $companyId)->where('is_active', true)->get();
 
-        return redirect()->back()->with('success', 'Sincronização iniciada com sucesso.');
+        if ($credentials->isEmpty()) {
+            return redirect()->back()->with('error', 'Nenhuma integração ativa encontrada para sincronizar.');
+        }
+
+        $imported = 0;
+        $updated = 0;
+        $errors = [];
+        $anyOk = false;
+
+        foreach ($credentials as $credential) {
+            $result = $this->service->syncListings($credential);
+            $anyOk = $anyOk || $result['ok'];
+            $imported += $result['imported'];
+            $updated += $result['updated'];
+            if (!$result['ok']) {
+                $errors[] = ($credential->account_nickname ?: $credential->platform) . ': ' . $result['message'];
+            } else {
+                $errors = array_merge($errors, $result['errors']);
+            }
+        }
+
+        $errorSuffix = empty($errors) ? '' : ', ' . count($errors) . ' erro(s)';
+
+        if ($credentials->count() > 1) {
+            $message = sprintf('Sincronização de %d conta(s): %d criado(s), %d atualizado(s)%s.',
+                $credentials->count(), $imported, $updated, $errorSuffix);
+        } elseif (!$anyOk) {
+            $message = $errors[0] ?? 'Falha ao sincronizar.';
+        } else {
+            $message = sprintf('Sincronização concluída: %d criado(s), %d atualizado(s)%s.', $imported, $updated, $errorSuffix);
+        }
+
+        return redirect()->back()->with($anyOk ? 'success' : 'error', $message);
     }
 }

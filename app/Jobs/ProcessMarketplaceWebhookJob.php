@@ -44,7 +44,7 @@ class ProcessMarketplaceWebhookJob implements ShouldQueue
 
             // 1. Identifica a Integração e Empresa
             $integration = \App\Models\Integration::where('external_user_id', (string)$userId)
-                ->where('platform', 'mercadolivre')
+                ->where('platform', \App\Models\Integration::PLATFORM_MERCADO_LIVRE)
                 ->first();
 
             if (!$integration) {

@@ -135,7 +135,7 @@ class SettingsController extends Controller
             $integration = Integration::updateOrCreate(
                 [
                     'company_id' => $config->company_id,
-                    'platform' => 'mercadolivre',
+                    'platform' => Integration::PLATFORM_MERCADO_LIVRE,
                     'seller_id' => (string) $data['user_id']
                 ],
                 [

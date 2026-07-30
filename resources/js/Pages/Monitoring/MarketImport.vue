@@ -159,7 +159,11 @@ function submit() {
             }
         },
         onError: () => { stopPoll(); phase.value = 'idle'; },
-        onFinish: () => { stopPoll(); phase.value = 'idle'; form.reset('file', 'progress_token'); },
+        // O request agora só enfileira o job e volta na hora — o processamento
+        // continua em segundo plano depois que essa promise resolve. Quem
+        // encerra o polling é o status 'done' que vem do backend (dentro de
+        // startPoll), não o fim deste request.
+        onSuccess: () => { form.reset('file', 'progress_token'); },
     });
 }
 

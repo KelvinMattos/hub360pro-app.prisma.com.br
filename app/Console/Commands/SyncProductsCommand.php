@@ -17,7 +17,7 @@ class SyncProductsCommand extends Command
     {
         $this->info("Iniciando sincronização global de produtos do Mercado Livre...");
 
-        $integrations = Integration::where('platform', 'mercadolivre')
+        $integrations = Integration::where('platform', Integration::PLATFORM_MERCADO_LIVRE)
             ->whereNotNull('access_token')
             ->get();
 
