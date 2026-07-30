@@ -134,10 +134,15 @@ class SkuStrategyClassifier
         $d90 = $now->copy()->subDays(90);
         $d180 = $now->copy()->subDays(180);
 
+        // Nunca whereIn(product_id, $productIds) aqui: com o catálogo inteiro (78 mil SKUs) isso
+        // vira um whereIn com mais placeholders que o limite do MySQL (65535, erro 1390 "too many
+        // placeholders" — mesmo bug real corrigido em ReplenishmentEngine::salesByProduct()). O
+        // join com `products` filtrado por company_id restringe ao tenant certo sem lista de ids.
         $rows = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->join('products', 'products.id', '=', 'order_items.product_id')
             ->where('orders.company_id', $companyId)
-            ->whereIn('order_items.product_id', $productIds)
+            ->where('products.company_id', $companyId)
             ->where("orders.$dateCol", '>=', $d180)
             ->select('order_items.product_id', "orders.$dateCol as odate", 'order_items.quantity')
             ->get();
