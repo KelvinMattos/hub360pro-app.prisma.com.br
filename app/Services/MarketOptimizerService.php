@@ -15,6 +15,12 @@ use Illuminate\Support\Facades\Schema;
  */
 class MarketOptimizerService
 {
+    public function __construct(
+        private PricingEngine $pricingEngine,
+        private ChannelConfigService $channelConfig
+    ) {
+    }
+
     private function has(string $c): bool
     {
         return Schema::hasColumn('products', $c);
@@ -174,68 +180,168 @@ class MarketOptimizerService
         ];
     }
 
-    /**
-     * Oportunidades: produtos perdendo com preço sugerido para reassumir a
-     * Buy Box. O sugerido fica logo abaixo do mercado, arredondado para
-     * terminar em ,90 — e é marcado como INVIÁVEL se ficar abaixo do piso
-     * (custo + margem mínima), para nunca sugerir venda no prejuízo.
-     */
-    public function opportunities(int $companyId, float $minMarginPct = 10, int $limit = 300): array
+    /** Margens mínimas por marca (mesma fonte usada pelo RepricingEngine). */
+    private function brandMargins(int $companyId): array
     {
-        if (!Schema::hasTable('products') || !$this->has('market_price')) {
+        if (!Schema::hasTable('brand_margins')) {
             return [];
         }
+        try {
+            return DB::table('brand_margins')->where('company_id', $companyId)
+                ->pluck('min_margin_pct', 'brand')
+                ->mapWithKeys(fn ($v, $k) => [mb_strtolower(trim((string) $k)) => (float) $v])->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
 
-        $eff = $this->effSql();
-        $sel = ['id', DB::raw("$eff as preco")];
-        foreach (['sku', 'brand', 'market_price', 'market_seller', 'market_url', 'cost_price',
-                  'stock_quantity', 'market_offers_count', 'buybox_winner'] as $c) {
+    /**
+     * Otimizar por canal: para cada canal ativo da empresa, verifica a saúde
+     * de margem de todo SKU vinculado àquele canal (mesmo critério de vínculo
+     * do Cálculo Promo: channel_prices[col], ou netshoes_price no caso da
+     * Netshoes) e, onde há dado de mercado real (hoje só a Netshoes, via
+     * Buy Box), sinaliza oportunidade de reduzir preço para reassumir a
+     * disputa — mas o preço sugerido NUNCA fica abaixo do piso daquele canal
+     * (custo + encargos do canal + margem mínima da marca/global), a mesma
+     * trava usada pelo RepricingEngine.
+     *
+     * Diferente do repricing automático (que só mexe quando há competidor
+     * conhecido), aqui também aparece quem está com margem doente MESMO SEM
+     * dado de concorrência — porque o custo subiu, ou o preço nunca foi
+     * ajustado depois que o canal mudou de comissão, por exemplo.
+     */
+    public function opportunitiesByChannel(int $companyId, float $minMarginPct = 10, int $limitPerChannel = 300): array
+    {
+        if (!Schema::hasTable('products')) {
+            return ['channels' => []];
+        }
+
+        $hasChannelPrices = $this->has('channel_prices');
+        $hasNetshoesPrice = $this->has('netshoes_price');
+        $margins = $this->brandMargins($companyId);
+
+        $config = $this->channelConfig->forCompany($companyId);
+        $imposto = (float) ($config['imposto'] ?? 0);
+        $channels = collect($config['channels'] ?? [])->filter(fn ($c) => $c['active'] ?? true)->values();
+
+        $select = ['id', 'sku', 'cost_price', 'stock_quantity'];
+        foreach (['title', 'brand', 'sale_price', 'channel_prices', 'netshoes_price',
+                  'market_price', 'market_seller', 'market_url', 'buybox_winner'] as $c) {
             if ($this->has($c)) {
-                $sel[] = $c;
+                $select[] = $c;
             }
         }
-        $sel[] = ($this->has('title') ? 'title' : 'sku') . ' as titulo';
 
-        $rows = $this->withMarket($companyId)
-            ->select($sel)
-            ->whereRaw("$eff > market_price")
-            ->orderByRaw("($eff - market_price) DESC")
-            ->limit($limit)->get();
+        $rows = $this->scope($companyId)->select($select)->get();
 
-        return $rows->map(function ($r) use ($minMarginPct) {
-            $preco = (float) ($r->preco ?? 0);
-            $mkt = (float) $r->market_price;
-            $custo = isset($r->cost_price) ? (float) $r->cost_price : null;
+        $out = [];
+        foreach ($channels as $ch) {
+            $chId = (string) ($ch['id'] ?? '');
+            $label = (string) ($ch['label'] ?? $chId);
+            $comissao = (float) ($ch['comissao'] ?? 0);
+            $encargos = $comissao + $imposto;
+            $col = $ch['col'] ?? null;
+            if (!$col && $chId === 'centauro') $col = 'Centauro';
+            $isSite = $chId === 'site';
+            $isNetshoes = $chId === 'netshoes';
 
-            // Sugerido: logo abaixo do mercado, terminando em ,90
-            $sug = floor($mkt) - 0.10;
-            if ($sug >= $mkt) {
-                $sug = $mkt - 0.10;
+            $items = [];
+            foreach ($rows as $r) {
+                $sku = (string) ($r->sku ?? '');
+                if ($sku === '') continue;
+
+                $cp = [];
+                if ($hasChannelPrices) {
+                    $decoded = json_decode($r->channel_prices ?? '', true);
+                    if (is_array($decoded)) $cp = $decoded;
+                }
+
+                $preco = null;
+                if ($col && isset($cp[$col]) && (float) $cp[$col] > 0) {
+                    $preco = (float) $cp[$col];
+                }
+                if ($preco === null && $isNetshoes && $hasNetshoesPrice && (float) ($r->netshoes_price ?? 0) > 0) {
+                    $preco = (float) $r->netshoes_price;
+                }
+                if ($isSite && $preco === null && (float) ($r->sale_price ?? 0) > 0) {
+                    $preco = (float) $r->sale_price;
+                }
+                if ($preco === null) continue; // sem vínculo com este canal — não aparece
+
+                $custo = isset($r->cost_price) ? (float) $r->cost_price : null;
+                $marca = $r->brand ?? null;
+                $margem = ($marca && isset($margins[mb_strtolower(trim($marca))]))
+                    ? $margins[mb_strtolower(trim($marca))]
+                    : $minMarginPct;
+
+                $piso = ($custo && $custo > 0) ? $this->pricingEngine->floorPrice($custo, $encargos, $margem) : null;
+                $margemAtual = ($custo !== null) ? $this->pricingEngine->netMarginPct($preco, $custo, $encargos) : null;
+                $saudavel = $piso === null ? null : ($preco >= $piso);
+
+                $item = [
+                    'id' => $r->id,
+                    'sku' => $sku,
+                    'titulo' => $r->title ?? $sku,
+                    'marca' => $marca,
+                    'preco' => round($preco, 2),
+                    'custo' => $custo,
+                    'encargos_pct' => round($encargos, 2),
+                    'margem_minima_pct' => $margem,
+                    'piso' => $piso !== null ? round($piso, 2) : null,
+                    'margem_atual_pct' => $margemAtual,
+                    'saudavel' => $saudavel,
+                    'estoque' => isset($r->stock_quantity) ? (int) $r->stock_quantity : null,
+                    'market_price' => null,
+                    'gap' => null,
+                    'perdendo_buybox' => null,
+                    'seller' => null,
+                    'sugerido' => null,
+                ];
+
+                // Buy Box: só a Netshoes tem preço de mercado coletado hoje (ver CLAUDE.md §5.2/§7).
+                if ($isNetshoes && isset($r->market_price) && (float) $r->market_price > 0) {
+                    $mkt = (float) $r->market_price;
+                    $perdendo = $preco > $mkt;
+                    $item['market_price'] = $mkt;
+                    $item['gap'] = round(($preco - $mkt) / $mkt * 100, 1);
+                    $item['perdendo_buybox'] = $perdendo;
+                    $item['seller'] = $r->market_seller ?? null;
+
+                    if ($perdendo) {
+                        $sug = floor($mkt) - 0.10;
+                        if ($sug >= $mkt) $sug = $mkt - 0.10;
+                        $sug = max(0.10, round($sug, 2));
+                        // Nunca sugere abaixo do piso do canal — mesma trava do RepricingEngine.
+                        if ($piso !== null && $sug < $piso) $sug = round($piso, 2);
+                        $item['sugerido'] = $sug;
+                    }
+                }
+
+                $items[] = $item;
             }
-            $sug = max(0.10, round($sug, 2));
 
-            $piso = ($custo && $custo > 0) ? round($custo * (1 + $minMarginPct / 100), 2) : null;
-            $viavel = $piso === null ? null : ($sug >= $piso);
+            $total = count($items);
+            $abaixoPiso = count(array_filter($items, fn ($i) => $i['saudavel'] === false));
+            $perdendoBB = count(array_filter($items, fn ($i) => $i['perdendo_buybox'] === true));
 
-            return [
-                'id' => $r->id,
-                'titulo' => $r->titulo,
-                'sku' => $r->sku ?? null,
-                'marca' => $r->brand ?? null,
-                'preco' => round($preco, 2),
-                'market_price' => $mkt,
-                'sugerido' => $sug,
-                'reducao' => round($preco - $sug, 2),
-                'gap' => $mkt > 0 ? round(($preco - $mkt) / $mkt * 100, 1) : null,
-                'custo' => $custo,
-                'piso' => $piso,
-                'viavel' => $viavel,
-                'seller' => $r->market_seller ?? null,
-                'url' => $r->market_url ?? null,
-                'estoque' => isset($r->stock_quantity) ? (int) $r->stock_quantity : null,
-                'ofertas' => $r->market_offers_count ?? null,
+            // Prioridade: margem doente primeiro, depois perdendo Buy Box, depois o resto.
+            usort($items, function ($a, $b) {
+                $rank = fn ($i) => $i['saudavel'] === false ? 0 : ($i['perdendo_buybox'] === true ? 1 : 2);
+                return $rank($a) <=> $rank($b);
+            });
+
+            $out[] = [
+                'key' => $chId,
+                'label' => $label,
+                'comissao' => $comissao,
+                'encargos_pct' => round($encargos, 2),
+                'has_market_data' => $isNetshoes,
+                'stats' => ['total' => $total, 'abaixo_piso' => $abaixoPiso, 'perdendo_buybox' => $perdendoBB],
+                'items' => array_slice($items, 0, $limitPerChannel),
             ];
-        })->all();
+        }
+
+        return ['channels' => $out];
     }
 
     /** Otimizações recentes: quedas de preço registradas no histórico. */
