@@ -413,8 +413,10 @@ class MagazordImportController extends Controller
             ->whereNotNull('sku')->pluck('id', 'sku');
 
         $priceChannels = ['Site', 'Mercado Livre', 'Amazon', 'Netshoes', 'Shopee', 'Magalu', 'Centauro', 'Dafiti', 'Via Varejo'];
+        $hasChannelPrices = Schema::hasColumn('products', 'channel_prices');
+        $hasNetshoesPrice = Schema::hasColumn('products', 'netshoes_price');
 
-        $updated = 0; $created = 0; $notFound = 0; $skipped = 0; $rows = 0;
+        $updated = 0; $created = 0; $notFound = 0; $skipped = 0; $rows = 0; $netshoesLinked = 0;
         DB::beginTransaction();
         try {
             foreach ($records as $row) {
@@ -436,7 +438,8 @@ class MagazordImportController extends Controller
                 }
                 if ($price <= 0) { $skipped++; continue; }
 
-                // Custo e estoque (presentes no modelo Consulta Dinâmica).
+                // Custo e estoque (presentes no modelo Consulta Dinâmica). Estoque é
+                // único/compartilhado entre canais — não existe "estoque por canal".
                 $cost = $this->brNumber($this->col($row, ['Custo']));
                 $estoqueRaw = $this->col($row, ['Estoque']);
                 $estoque = $estoqueRaw !== null ? (int) round($this->brNumber($estoqueRaw) ?? 0) : null;
@@ -445,14 +448,26 @@ class MagazordImportController extends Controller
                 if ($cost !== null && $cost > 0) $payload['cost_price'] = $cost;
                 if ($estoque !== null) $payload['stock_quantity'] = $estoque;
 
-                // Preços por canal (aproveita 100% do modelo Consulta Dinâmica).
+                // Preços por canal (aproveita 100% do modelo Consulta Dinâmica) — só
+                // vincula o canal quando a coluna correspondente vem preenchida (> 0);
+                // "0,00" na planilha significa "não vende nesse canal".
                 $cp = [];
                 foreach ($priceChannels as $ch) {
                     $v = $this->brNumber($this->col($row, [$ch]));
                     if ($v !== null && $v > 0) $cp[$ch] = $v;
                 }
-                if ($cp && Schema::hasColumn('products', 'channel_prices')) {
+                if ($cp && $hasChannelPrices) {
                     $payload['channel_prices'] = json_encode($cp, JSON_UNESCAPED_UNICODE);
+                }
+
+                // Canal Netshoes: mesma coluna (netshoes_price) já usada pelo
+                // importador dedicado em Importações Netshoes → Preços, para o
+                // Monitoramento/Buy Box enxergar o preço sem precisar do export
+                // separado do Seller Center.
+                if ($hasNetshoesPrice && isset($cp['Netshoes'])) {
+                    $payload['netshoes_price'] = $cp['Netshoes'];
+                    $payload['netshoes_synced_at'] = now();
+                    $netshoesLinked++;
                 }
 
                 if ($skuToId->has($sku)) {
@@ -480,13 +495,21 @@ class MagazordImportController extends Controller
             return $this->fail($e);
         }
 
+        $message = "Preços importados: {$updated} atualizados, {$created} criados, {$notFound} SKUs não encontrados (de {$rows} linhas). Preço de venda, custo e estoque atualizados quando presentes no arquivo.";
+        $message .= $hasChannelPrices
+            ? ' Preço por canal vinculado (Site, Mercado Livre, Amazon, Shopee, Magalu, Centauro, Dafiti, Via Varejo).'
+            : ' ATENÇÃO: a coluna channel_prices não existe no banco — o preço por canal não foi salvo (rode as migrations pendentes).';
+        if ($hasNetshoesPrice) {
+            $message .= " Netshoes: {$netshoesLinked} produtos sincronizados com o preço do canal dedicado (netshoes_price).";
+        }
+
         return [
             'ok' => true,
             'rows' => $rows,
             'updated' => $updated,
             'created' => $created,
             'skipped' => $notFound + $skipped,
-            'message' => "Preços importados: {$updated} atualizados, {$created} criados, {$notFound} SKUs não encontrados (de {$rows} linhas). Preço de venda, custo e estoque atualizados quando presentes no arquivo.",
+            'message' => $message,
         ];
     }
 
