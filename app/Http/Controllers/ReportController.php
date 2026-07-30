@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\OrderItem;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 use Inertia\Inertia;
 
@@ -17,6 +18,14 @@ class ReportController extends Controller
     {
         $user = Auth::user();
         $cid = $user->company_id;
+
+        // Schema de produção diverge do model (CLAUDE.md §4) — resolve as colunas
+        // reais em vez de assumir que existem, pra não derrubar a tela com 500.
+        $orderCols = Schema::getColumnListing('orders');
+        $hasOrderCol = fn ($c) => in_array($c, $orderCols, true);
+        $dateCol = $hasOrderCol('date_created') ? 'date_created' : ($hasOrderCol('order_date') ? 'order_date' : 'created_at');
+        $profitSql = $hasOrderCol('net_profit') ? 'SUM(net_profit)' : '0';
+        $hasIntegrationId = $hasOrderCol('integration_id');
 
         // 1. Definição do Período (Range)
         $range = $request->get('range', 'this_month');
@@ -70,13 +79,13 @@ class ReportController extends Controller
 
         // 2. Métricas Principais (KPIs) com Comparativo
         $currentStats = Order::where('company_id', $cid)
-            ->whereBetween('date_created', [$start, $end])
+            ->whereBetween($dateCol, [$start, $end])
             ->where('status', '!=', 'cancelled')
-            ->selectRaw('COUNT(*) as total_orders, SUM(total_amount) as revenue, AVG(total_amount) as ticket, SUM(net_profit) as profit')
+            ->selectRaw("COUNT(*) as total_orders, SUM(total_amount) as revenue, AVG(total_amount) as ticket, {$profitSql} as profit")
             ->first();
 
         $prevStats = Order::where('company_id', $cid)
-            ->whereBetween('date_created', [$prevStart, $prevEnd])
+            ->whereBetween($dateCol, [$prevStart, $prevEnd])
             ->where('status', '!=', 'cancelled')
             ->selectRaw('SUM(total_amount) as revenue')
             ->first();
@@ -92,9 +101,9 @@ class ReportController extends Controller
 
         // 3. Gráfico de Evolução (Diário)
         $evolution = Order::where('company_id', $cid)
-            ->whereBetween('date_created', [$start, $end])
+            ->whereBetween($dateCol, [$start, $end])
             ->where('status', '!=', 'cancelled')
-            ->selectRaw('DATE(date_created) as date, SUM(total_amount) as total')
+            ->selectRaw("DATE({$dateCol}) as date, SUM(total_amount) as total")
             ->groupBy('date')
             ->orderBy('date')
             ->get();
@@ -104,7 +113,7 @@ class ReportController extends Controller
 
         // 4. Funil de Status
         $funnelRaw = Order::where('company_id', $cid)
-            ->whereBetween('date_created', [$start, $end])
+            ->whereBetween($dateCol, [$start, $end])
             ->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
             ->pluck('count', 'status')
@@ -117,20 +126,24 @@ class ReportController extends Controller
             'cancelled' => $funnelRaw['cancelled'] ?? 0,
         ];
 
-        // 5. Vendas por Canal (Marketplace)
-        $channelStats = DB::table('orders')
-            ->join('integrations', 'orders.integration_id', '=', 'integrations.id')
-            ->where('orders.company_id', $cid)
-            ->whereBetween('orders.date_created', [$start, $end])
-            ->select('integrations.platform', DB::raw('SUM(orders.total_amount) as total'), DB::raw('COUNT(*) as qty'))
-            ->groupBy('integrations.platform')
-            ->get();
+        // 5. Vendas por Canal (Marketplace) — só roda se orders.integration_id
+        // existir; pedidos importados via Magazord/Netshoes (CSV/planilha, sem
+        // Integration OAuth) nunca têm esse vínculo, então não é obrigatório.
+        $channelStats = $hasIntegrationId
+            ? DB::table('orders')
+                ->join('integrations', 'orders.integration_id', '=', 'integrations.id')
+                ->where('orders.company_id', $cid)
+                ->whereBetween("orders.{$dateCol}", [$start, $end])
+                ->select('integrations.platform', DB::raw('SUM(orders.total_amount) as total'), DB::raw('COUNT(*) as qty'))
+                ->groupBy('integrations.platform')
+                ->get()
+            : collect([]);
 
         // 6. Top Produtos (Curva A)
         $topProducts = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->where('orders.company_id', $cid)
-            ->whereBetween('orders.date_created', [$start, $end])
+            ->whereBetween("orders.{$dateCol}", [$start, $end])
             ->where('orders.status', '!=', 'cancelled')
             ->select('order_items.title', 'order_items.sku', DB::raw('SUM(order_items.quantity) as qty'), DB::raw('SUM(order_items.unit_price * order_items.quantity) as total'))
             ->groupBy('order_items.sku', 'order_items.title')
@@ -166,15 +179,21 @@ class ReportController extends Controller
         $user = Auth::user();
         $cid = $user->company_id;
 
+        $orderCols = Schema::getColumnListing('orders');
+        $hasOrderCol = fn ($c) => in_array($c, $orderCols, true);
+        $dateCol = $hasOrderCol('date_created') ? 'date_created' : ($hasOrderCol('order_date') ? 'order_date' : 'created_at');
+
         // Pega os últimos 2000 pedidos para gerar o relatório
         $data = Order::where('company_id', $cid)
             ->with(['items', 'integration'])
-            ->latest('date_created')
+            ->latest($dateCol)
             ->limit(2000)
             ->get()
-            ->map(function ($order) {
+            ->map(function ($order) use ($dateCol) {
+            $rawDate = $order->{$dateCol};
+            $date = $rawDate ? ($rawDate instanceof Carbon ? $rawDate : Carbon::parse($rawDate)) : null;
             return [
-            'Data' => $order->date_created->format('d/m/Y H:i'),
+            'Data' => $date ? $date->format('d/m/Y H:i') : null,
             'ID Externo' => $order->external_id,
             'Canal' => $order->integration->platform ?? 'Manual',
             'Cliente' => $order->customer_name,
@@ -183,7 +202,11 @@ class ReportController extends Controller
             'Custo Prod (R$)' => $order->cost_products,
             'Taxas (R$)' => $order->cost_tax_platform,
             'Lucro (R$)' => $order->net_profit,
-            'Produtos' => $order->items->pluck('title')->join(', ')
+            // orders.items é uma coluna JSON legada (nunca escrita) que colide com o
+            // relacionamento items() — $order->items (propriedade) sempre retorna
+            // essa coluna (null), não a coleção de OrderItem. getRelation() pega o
+            // que foi carregado no with(['items']) acima, sem cair nessa colisão.
+            'Produtos' => $order->getRelation('items')->pluck('title')->join(', ')
             ];
         });
 

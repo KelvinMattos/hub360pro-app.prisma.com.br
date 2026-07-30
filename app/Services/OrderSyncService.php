@@ -92,7 +92,11 @@ class OrderSyncService
         if ($calculatedComm == 0) {
             $totalComm = 0;
             $totalFixed = 0;
-            foreach ($order->items as $item) {
+            // orders.items é uma coluna JSON legada (nunca escrita) que colide com o
+            // relacionamento items() — $order->items (propriedade) sempre retorna essa
+            // coluna (null), não a coleção de OrderItem. getRelation() pega o que foi
+            // carregado no load('items...') acima, sem cair nessa colisão.
+            foreach ($order->getRelation('items') as $item) {
                 if ($item->product && $item->product->pricing && $item->product->pricing->meli_commission_percent > 0) {
                     $percent = $item->product->pricing->meli_commission_percent;
                     $itemTotal = $item->unit_price * $item->quantity;
@@ -129,7 +133,7 @@ class OrderSyncService
         $operationalCostValue = $grossRevenue * ($globalOpRate / 100);
         
         $currentCmv = 0;
-        foreach ($order->items as $item) {
+        foreach ($order->getRelation('items') as $item) {
              $currentCmv += ($item->unit_cost * $item->quantity);
         }
 
