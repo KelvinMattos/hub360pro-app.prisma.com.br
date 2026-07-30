@@ -129,17 +129,23 @@ valia para o diagnóstico do PR #9.
 O cliente pediu explicitamente, como regra permanente: **nenhum commit deve mencionar
 Claude** — nem rodapé `Co-Authored-By`, nem `Claude-Session`. Autoria sempre Kelvin Mattos.
 
-- **Mensagens de commit** (as escritas por Claude Code neste projeto) **não levam**
-  `Co-Authored-By: Claude...` nem `Claude-Session: ...` — só o corpo da mensagem
-  explicando o que mudou e por quê.
-- O commit final que chega na `main` (squash-merge da PR) **já sai assim por
-  conta do GitHub** — o squash atribui a autoria ao dono da PR (Kelvin Mattos),
-  independente de quem tenha gerado o conteúdo. O que precisa de atenção é só o
-  **texto** da mensagem, que é escrito à mão a cada commit.
-- **Não mexer em `git config`** (`user.name`/`user.email`) pra tentar "corrigir" a
-  autoria das branches intermediárias — é proibido por regra de segurança do
-  agente (nunca alterar config de git), e de qualquer forma é irrelevante: essas
-  branches são descartadas no squash-merge, só a mensagem do commit final importa.
+- **Incidente:** a primeira tentativa foi só tirar o rodapé `Co-Authored-By: Claude`
+  do texto da mensagem — não bastou. O GitHub, no squash-merge, **adiciona esse
+  rodapé sozinho** com base no autor real dos commits que estão sendo squashados
+  (o campo `Author`, não o texto da mensagem). Como o git config local deste
+  agente é `Claude <noreply@anthropic.com>`, o `Co-Authored-By: Claude` reaparecia
+  de qualquer jeito no commit final da `main`.
+- **Regra:** todo commit precisa usar
+  `git commit --author="Kelvin Mattos <33702726+KelvinMattos@users.noreply.github.com>"`
+  (a flag `--author`, não `git config`) além de **não escrever** `Co-Authored-By`/
+  `Claude-Session` no corpo da mensagem. Com o `Author` do commit já sendo Kelvin
+  Mattos, o GitHub não tem "outro autor" pra adicionar como co-autor no squash.
+- **Por que `--author` e não `git config`:** mudar `git config` (mesmo só local) é
+  proibido por regra de segurança do agente. `--author` é uma flag de linha de
+  comando pontual, não uma mudança de configuração — não altera nada persistente.
+- Commits anteriores a essa regra (PR #9 a #15) já têm o rodapé — **não vale a
+  pena reescrever o histórico da `main`** pra tirar isso (exigiria rebase/force-push
+  na main, arriscado, só por causa de metadado de commit).
 
 ---
 
