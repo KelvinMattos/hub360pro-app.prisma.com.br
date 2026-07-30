@@ -350,21 +350,26 @@ class NetshoesImportController extends Controller
         // o catálogo inteiro, então não precisa de streaming/lote.
         $porPedido = [];
         $rows = 0; $trocas = 0;
-        foreach ($this->readRows($path) as $row) {
-            $rows++; $this->tick();
+        try {
+            foreach ($this->readRows($path) as $row) {
+                $rows++; $this->tick();
 
-            $numero = $this->col($row, ['Número Pedido', 'Numero Pedido']);
-            if ($numero === null || $numero === '') continue;
+                $numero = $this->col($row, ['Número Pedido', 'Numero Pedido']);
+                if ($numero === null || $numero === '') continue;
 
-            $tipo = $this->col($row, ['Tipo do Pedido']);
-            if ($tipo !== null && mb_strtolower(trim($tipo)) === 'troca') {
-                $trocas++;
-                continue;
+                $tipo = $this->col($row, ['Tipo do Pedido']);
+                if ($tipo !== null && mb_strtolower(trim($tipo)) === 'troca') {
+                    $trocas++;
+                    continue;
+                }
+
+                if (!isset($porPedido[$numero])) {
+                    $porPedido[$numero] = $row;
+                }
             }
-
-            if (!isset($porPedido[$numero])) {
-                $porPedido[$numero] = $row;
-            }
+        } catch (\Throwable $e) {
+            // Nada foi gravado ainda (leitura do arquivo) — sem rollback a fazer.
+            return $this->fail($e);
         }
 
         $created = 0; $updated = 0; $skipped = 0;
