@@ -198,8 +198,15 @@ function submit() {
                 }
             }
         },
-        onError: () => { stopPoll(); phase.value = 'idle'; },
-        onFinish: () => { stopPoll(); phase.value = 'idle'; form.reset('file', 'progress_token'); },
+        onError: () => {
+            // Se o processamento já começou (upload concluído), um erro aqui é
+            // provavelmente o Cloudflare cortando a conexão em imports longos
+            // (~100s, ver CLAUDE.md §6.3) — o backend continua rodando e o
+            // resultado real só chega pelo polling. Só cancela a busca do
+            // resultado se a falha foi antes de processar (ex.: validação).
+            if (phase.value !== 'processing') { stopPoll(); phase.value = 'idle'; }
+        },
+        onSuccess: () => { form.reset('file', 'progress_token'); },
     });
 }
 

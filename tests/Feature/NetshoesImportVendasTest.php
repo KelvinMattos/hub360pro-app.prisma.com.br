@@ -117,4 +117,25 @@ class NetshoesImportVendasTest extends TestCase
         $response = $this->post(route('netshoes.import', ['type' => 'vendas']), ['file' => $this->vendasFile()]);
         $response->assertRedirect(route('login'));
     }
+
+    /**
+     * A leitura/agrupamento por "Número Pedido" (antes da transação de escrita)
+     * não estava dentro de um try/catch — um arquivo corrompido derrubaria a
+     * requisição inteira com 500 e o progresso nunca seria marcado "done": o
+     * polling do frontend ficaria girando pra sempre sem nunca mostrar o
+     * relatório de erro. Corrigido para sempre retornar um resultado (ok:false).
+     */
+    public function test_import_reports_failure_instead_of_crashing_on_corrupt_file(): void
+    {
+        $user = $this->authenticatedUser();
+
+        $corrupt = UploadedFile::fake()->createWithContent('vendas.xlsx', 'isso não é um xlsx de verdade');
+
+        $response = $this->actingAs($user)
+            ->post(route('netshoes.import', ['type' => 'vendas']), ['file' => $corrupt]);
+
+        $response->assertRedirect(route('netshoes.show', ['type' => 'vendas']));
+        $response->assertSessionHas('error');
+        $this->assertDatabaseCount('orders', 0);
+    }
 }
