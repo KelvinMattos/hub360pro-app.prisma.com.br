@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\Inventory\ReplenishmentController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\MeliIntelligenceController;
 use App\Http\Controllers\CustomerController;
@@ -195,7 +196,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/meli/war-room', fn () => redirect()->route('decision.index'))->name('meli.war_room');
         Route::get('/meli/trends', [MeliIntelligenceController::class, 'trends'])->name('meli.trends');
         Route::get('/meli/market-share', [MeliIntelligenceController::class, 'marketShare'])->name('meli.market_share');
-        Route::get('/inventory/planning', [InventoryController::class , 'planning'])->name('inventory.planning');
+        Route::get('/inventory/planning', [ReplenishmentController::class, 'index'])->name('inventory.planning');
+        Route::get('/inventory/planning/export', [ReplenishmentController::class, 'export'])->name('inventory.planning.export');
+        Route::post('/inventory/planning/settings', [ReplenishmentController::class, 'updateSettings'])->name('inventory.planning.settings');
+        Route::post('/inventory/planning/recompute', [ReplenishmentController::class, 'recompute'])->name('inventory.planning.recompute');
         Route::get('/inventory/aging', [InventoryController::class , 'aging'])->name('inventory.aging');
         // Calculadora ML antiga -> nova calculadora geral de canais
         Route::get('/meli/calculator', fn () => redirect()->route('calculator.index'))->name('meli.calculator');
