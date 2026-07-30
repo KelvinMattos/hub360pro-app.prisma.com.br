@@ -19,7 +19,7 @@ class FinancialReportService
 
         // Receita Bruta (Pedidos pagos no período)
         $grossRevenue = Order::whereBetween('date_created', [$start, $end])
-            ->where('status', 'paid')
+            ->whereIn('status', Order::CONFIRMED_STATUSES)
             ->sum('total_amount');
 
         // Deduções (Impostos estimados nas notas autorizadas)
@@ -32,7 +32,7 @@ class FinancialReportService
 
         // CPV - Custo dos Produtos Vendidos
         $costOfGoodsSold = Order::whereBetween('date_created', [$start, $end])
-            ->where('status', 'paid')
+            ->whereIn('status', Order::CONFIRMED_STATUSES)
             ->sum('cost_products');
 
         // Lucro Bruto

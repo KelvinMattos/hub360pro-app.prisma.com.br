@@ -26,7 +26,7 @@ class FinancialProrationService
         // 1. Métricas de Vendas (Baseado em Pedidos Pagos/Enviados)
         $ordersQuery = Order::where('company_id', $companyId)
             ->whereBetween($this->orderDateColumn(), [$startDate, $endDate])
-            ->whereIn('status', ['paid', 'shipped', 'delivered', 'accredited']);
+            ->whereIn('status', Order::CONFIRMED_STATUSES);
 
         $orderCount = (clone $ordersQuery)->count();
 
@@ -89,7 +89,7 @@ class FinancialProrationService
         // Total de Pedidos Faturáveis no mês
         $orderCount = Order::where('company_id', $companyId)
             ->whereBetween($this->orderDateColumn(), [$startDate, $endDate])
-            ->whereIn('status', ['paid', 'shipped', 'delivered', 'accredited'])
+            ->whereIn('status', Order::CONFIRMED_STATUSES)
             ->count();
 
         if ($orderCount === 0) return 0;

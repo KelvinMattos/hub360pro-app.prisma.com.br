@@ -87,4 +87,23 @@ class FinancialProrationServiceTest extends TestCase
         // No mês real do pedido, o custo fixo é rateado sobre o único pedido.
         $this->assertSame(1000.0, $service->calculateAllocationPerOrder($this->companyId, $realDate));
     }
+
+    /**
+     * Achado na mesma investigação do bug de Reposição Inteligente: o
+     * whitelist de status confirmado não incluía 'approved' — o status que
+     * os importadores Magazord e Netshoes gravam pra pedido pago (ver
+     * Order::CONFIRMED_STATUSES). Sem isso, a maioria das vendas reais
+     * (vindas desses dois canais, não do Mercado Livre) ficava fora do
+     * Dashboard financeiro e do DRE.
+     */
+    public function test_approved_status_from_magazord_netshoes_counts_as_confirmed_sale(): void
+    {
+        $this->insertOrder(['status' => 'approved', 'total_amount' => 777, 'date_created' => now()]);
+
+        $service = app(FinancialProrationService::class);
+        $result = $service->calculateNetProfit($this->companyId, now()->year, now()->month);
+
+        $this->assertSame(1, $result['order_count']);
+        $this->assertSame(777.0, $result['gross_revenue']);
+    }
 }
