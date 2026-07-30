@@ -15,17 +15,40 @@ class MarketplaceListingService
         $this->manager = $manager;
     }
 
-    public function syncListings(Integration $credential)
+    /**
+     * Sincroniza os anúncios de uma credencial e devolve um resultado
+     * estruturado — antes, qualquer falha (ex.: token expirado) era engolida
+     * num catch+log e o controller sempre respondia sucesso, escondendo do
+     * usuário que nada foi sincronizado.
+     *
+     * @return array{ok: bool, imported: int, updated: int, errors: array<string>, message: string}
+     */
+    public function syncListings(Integration $credential): array
     {
         try {
             $adapter = $this->manager->adapter($credential);
             $externalProducts = $adapter->fetchProducts($credential);
+        } catch (\Throwable $e) {
+            Log::error("Error syncing listings for credential {$credential->id}: " . $e->getMessage());
+            return [
+                'ok' => false,
+                'imported' => 0,
+                'updated' => 0,
+                'errors' => [$e->getMessage()],
+                'message' => 'Falha ao sincronizar com o marketplace: ' . $e->getMessage(),
+            ];
+        }
 
-            foreach ($externalProducts as $p) {
+        $imported = 0;
+        $updated = 0;
+        $errors = [];
+
+        foreach ($externalProducts as $p) {
+            try {
                 // Sincronização robusta vinculando por SKU ou ID Externo
-                Product::updateOrCreate(
+                $product = Product::updateOrCreate(
                     [
-                        'company_id' => $credential->company_id, 
+                        'company_id' => $credential->company_id,
                         'external_id' => $p['external_id']
                     ],
                     [
@@ -55,9 +78,24 @@ class MarketplaceListingService
                         ]
                     ]
                 );
+                $product->wasRecentlyCreated ? $imported++ : $updated++;
+            } catch (\Throwable $e) {
+                Log::error("Error syncing product {$p['external_id']} for credential {$credential->id}: " . $e->getMessage());
+                $errors[] = "Produto {$p['external_id']}: " . $e->getMessage();
             }
-        } catch (\Exception $e) {
-            Log::error("Error syncing listings for credential {$credential->id}: " . $e->getMessage());
         }
+
+        return [
+            'ok' => true,
+            'imported' => $imported,
+            'updated' => $updated,
+            'errors' => $errors,
+            'message' => sprintf(
+                'Sincronização concluída: %d criado(s), %d atualizado(s)%s.',
+                $imported,
+                $updated,
+                empty($errors) ? '' : ' — ' . count($errors) . ' erro(s), veja o log.'
+            ),
+        ];
     }
 }

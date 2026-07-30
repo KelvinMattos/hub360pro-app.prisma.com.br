@@ -30,7 +30,7 @@ class MeliRefreshTokenCommand extends Command
     {
         $this->info("Iniciando renovação global de tokens Mercado Livre...");
 
-        $integrations = Integration::where('platform', 'mercadolivre')
+        $integrations = Integration::where('platform', Integration::PLATFORM_MERCADO_LIVRE)
             ->whereNotNull('refresh_token')
             ->get();
 
