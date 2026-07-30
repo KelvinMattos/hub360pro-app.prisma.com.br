@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PricingSimulation;
 use App\Http\Requests\Pricing\StorePricingSimulationRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
 
@@ -57,11 +58,18 @@ class PricingSimulationController extends Controller
         $companyId = Auth::user()->company_id;
 
         // Dados Históricos Reais (Últimos 30 dias) - Volume de Vendas
+        // date_created é a data real do pedido; created_at é o timestamp da importação
+        // (ver CLAUDE.md §5.1) — usar created_at aqui contaria vendas importadas há pouco
+        // como se tivessem acontecido nos últimos 30 dias, mesmo sendo antigas.
+        $cols = Schema::getColumnListing('orders');
+        $has = fn ($c) => in_array($c, $cols, true);
+        $dateCol = $has('date_created') ? 'date_created' : ($has('order_date') ? 'order_date' : 'created_at');
+
         $salesVolume = \App\Models\Order::where('company_id', $companyId)
             ->whereHas('items', function ($query) use ($product) {
                 $query->where('product_id', $product->id);
             })
-            ->where('created_at', '>=', now()->subDays(30))
+            ->where($dateCol, '>=', now()->subDays(30))
             ->count();
 
         // 1. Cenário Atual

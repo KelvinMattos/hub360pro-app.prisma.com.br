@@ -47,8 +47,11 @@ class FinancialDashboardControllerTest extends TestCase
             'cost_fee_shipping' => 0,
             'cost_fee_ads' => 0,
             'cost_fee_taxes' => 0,
-            'created_at' => $date,
-            'updated_at' => $date,
+            // date_created é a data real do pedido; created_at fica "agora" (timestamp
+            // de importação) para provar que o cálculo usa a data certa (CLAUDE.md §5.1).
+            'date_created' => $date,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 
