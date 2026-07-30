@@ -1,0 +1,4 @@
+Código;Produto;Marca;Quantidade;Custo;Estoque;Site;Shopee;Mercado Livre;Centauro;Via Varejo;Magalu;Dafiti;Amazon;Netshoes;Ativo
+SKU-A;Produto A;Marca A;10;5,50;20;9,90;0,00;9,90;0,00;9,90;9,90;0,00;0,00;12,90;Sim
+SKU-B;Produto B;Marca B;3;37,80;15;68,90;0,00;59,90;0,00;0,00;73,90;0,00;0,00;0,00;Sim
+SKU-NAOEXISTE;Produto C;Marca C;1;10,00;5;20,00;0,00;0,00;0,00;0,00;0,00;0,00;0,00;20,00;Sim
