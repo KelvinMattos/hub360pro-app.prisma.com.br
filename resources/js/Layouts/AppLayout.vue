@@ -198,6 +198,8 @@ const navigationConfig = [
         items: [
             { label: 'Importar Produtos Netshoes', route: 'netshoes.show', params: { type: 'produtos' }, icon: 'fa-solid fa-tags' },
             { label: 'Importar Estoque Netshoes', route: 'netshoes.show', params: { type: 'estoque' }, icon: 'fa-solid fa-boxes-stacked' },
+            { label: 'Importar Preços Netshoes', route: 'netshoes.show', params: { type: 'precos' }, icon: 'fa-solid fa-tag' },
+            { label: 'Importar Vendas Netshoes', route: 'netshoes.show', params: { type: 'vendas' }, icon: 'fa-solid fa-cart-shopping' },
         ]
     },
     {

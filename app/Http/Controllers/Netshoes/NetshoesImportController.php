@@ -14,16 +14,22 @@ use Inertia\Inertia;
 use OpenSpout\Reader\XLSX\Reader as XlsxReader;
 
 /**
- * Importações Netshoes (só canal — NÃO altera o catálogo).
+ * Importações Netshoes (só canal — NÃO altera o catálogo, exceto Vendas).
  *
- * Recebe os exports .xlsx do painel Netshoes e grava a sobreposição de canal
- * nos produtos já existentes, cruzando pelo `sku` (que é igual ao "ID Sku" /
- * "Sku Seller" da Netshoes):
- *   - Produtos (export "Portal") -> netshoes_sku, netshoes_price(_from), netshoes_status
+ * Recebe os exports .xlsx do painel Netshoes / Seller Center e grava a
+ * sobreposição de canal nos produtos já existentes, cruzando pelo `sku`
+ * (igual ao "ID Sku" / "Sku Seller" da Netshoes):
+ *   - Produtos (export "Portal")  -> netshoes_sku, netshoes_price(_from), netshoes_status
  *   - Estoque  (export "INVENTORY") -> netshoes_stock
+ *   - Preços   (export "PRICE")     -> netshoes_price, netshoes_price_from
+ *   - Vendas   (export de Pedidos do Seller Center, aba "pedidos_por_item")
+ *     -> cria/atualiza `orders` (única exceção que grava fora de `products`;
+ *        o arquivo vem por ITEM do pedido, não por pedido — agrupamos por
+ *        "Número Pedido" antes de gravar).
  *
- * O parsing é 100% por streaming (openspout) para aguentar dezenas de milhares
- * de linhas sem estourar memória. Não cria produtos novos.
+ * O parsing de produtos/estoque/preços é 100% por streaming (openspout) para
+ * aguentar dezenas de milhares de linhas sem estourar memória. Vendas é lido
+ * inteiro em memória (arquivos de pedidos são ordens de grandeza menores).
  */
 class NetshoesImportController extends Controller
 {
@@ -36,6 +42,7 @@ class NetshoesImportController extends Controller
             'value_label' => 'SKU Netshoes · Preço De/Por · Status',
             'description' => 'Export "Portal" da Netshoes (.xlsx). Cruza pelo SKU interno (coluna "ID Sku" = sku do produto) e grava o SKU Netshoes (para o Buy Box), o preço De/Por e o status do canal. Não cria produtos nem altera o catálogo.',
             'columns' => ['SKU Netshoes', 'ID Sku', 'Status', 'Preço De', 'Preço Por', 'Quantidade Estoque', 'Marca'],
+            'kind' => 'products',
         ],
         'estoque' => [
             'title' => 'Importar Estoque Netshoes',
@@ -45,6 +52,27 @@ class NetshoesImportController extends Controller
             'value_label' => 'Quantidade disponível',
             'description' => 'Export "INVENTORY" da Netshoes (.xlsx). Cruza pelo SKU interno (coluna "Sku Seller" = sku do produto) e atualiza o estoque disponível no canal Netshoes.',
             'columns' => ['Sku Seller', 'Quantidade disponível'],
+            'kind' => 'products',
+        ],
+        'precos' => [
+            'title' => 'Importar Preços Netshoes',
+            'icon' => 'fa-solid fa-tag',
+            'target' => 'products (netshoes_price, netshoes_price_from)',
+            'key_label' => 'Sku Seller  →  sku do produto',
+            'value_label' => 'Preço De · Preço Por',
+            'description' => 'Export "PRICE" da Netshoes (.xlsx). Cruza pelo SKU interno (coluna "Sku Seller" = sku do produto) e atualiza o preço De/Por praticado no canal Netshoes. Não cria produtos nem altera o catálogo.',
+            'columns' => ['Sku Seller', 'Preço De', 'Preço Por'],
+            'kind' => 'products',
+        ],
+        'vendas' => [
+            'title' => 'Importar Vendas Netshoes',
+            'icon' => 'fa-solid fa-cart-shopping',
+            'target' => 'orders',
+            'key_label' => 'Número Pedido  →  identificador do pedido',
+            'value_label' => 'Cliente, status, data, valor total',
+            'description' => 'Export de Pedidos do Seller Center (.xlsx, aba "pedidos_por_item"). O arquivo vem por ITEM do pedido — este importador agrupa por "Número Pedido" antes de gravar. Cria/atualiza pedidos (não cria itens de produto). Pedidos do tipo "Troca" são ignorados.',
+            'columns' => ['Número Pedido', 'Tipo do Pedido', 'Status do Pedido', 'Data da Compra', 'Valor Total Pedido Lojista', 'Nome do Comprador', 'CPF/CNPJ do Comprador', 'Forma de pagamento', 'Site Origem da Venda'],
+            'kind' => 'orders',
         ],
     ];
 
@@ -143,6 +171,8 @@ class NetshoesImportController extends Controller
         $summary = match ($type) {
             'produtos' => $this->importProdutos($path),
             'estoque' => $this->importEstoque($path),
+            'precos' => $this->importPrecos($path),
+            'vendas' => $this->importVendas($path),
         };
 
         $this->writeProgress('done', ['result' => $summary]);
@@ -241,6 +271,179 @@ class NetshoesImportController extends Controller
             'skipped' => $notFound + $skipped,
             'message' => "Estoque Netshoes: {$updated} produtos atualizados, {$notFound} SKUs não encontrados no catálogo (de {$rows} linhas).",
         ];
+    }
+
+    /* ============================================================
+     *  PREÇOS (export "PRICE") -> netshoes_price / netshoes_price_from
+     * ============================================================ */
+    private function importPrecos(string $path): array
+    {
+        $companyId = Auth::user()->company_id;
+        $skuToId = Product::where('company_id', $companyId)
+            ->whereNotNull('sku')->pluck('id', 'sku');
+
+        $updated = 0; $notFound = 0; $skipped = 0; $rows = 0;
+        DB::beginTransaction();
+        try {
+            foreach ($this->readRows($path) as $row) {
+                $rows++; $this->tick();
+
+                $sku = $this->col($row, ['Sku Seller', 'SKU Seller', 'ID Sku', 'Sku']);
+                if ($sku === null || $sku === '') { $skipped++; continue; }
+
+                if (!$skuToId->has($sku)) { $notFound++; continue; }
+
+                $payload = $this->prune([
+                    'netshoes_price' => $this->num($this->col($row, ['Preço Por', 'Preco Por'])),
+                    'netshoes_price_from' => $this->num($this->col($row, ['Preço De', 'Preco De'])),
+                    'netshoes_synced_at' => now(),
+                ]);
+
+                DB::table('products')->where('id', $skuToId[$sku])->update($payload);
+                $updated++;
+            }
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return $this->fail($e);
+        }
+
+        return [
+            'ok' => true,
+            'rows' => $rows,
+            'updated' => $updated,
+            'created' => 0,
+            'skipped' => $notFound + $skipped,
+            'message' => "Preços Netshoes: {$updated} atualizados, {$notFound} SKUs não encontrados no catálogo (de {$rows} linhas).",
+        ];
+    }
+
+    /* ============================================================
+     *  VENDAS (export de Pedidos do Seller Center, "pedidos_por_item")
+     *  -> orders (cria/atualiza; único tipo que grava fora de products)
+     * ============================================================ */
+    private function importVendas(string $path): array
+    {
+        $companyId = Auth::user()->company_id;
+
+        $cols = Schema::getColumnListing('orders');
+        $pick = fn (array $cands) => collect($cands)->first(fn ($c) => in_array($c, $cols, true));
+        $keyCol = $pick(['external_id', 'ml_order_id']);
+        $nameCol = $pick(['customer_name', 'buyer_nickname']);
+        $docCol = $pick(['customer_doc', 'billing_doc_number']);
+        $channelCol = $pick(['selling_channel']);
+        $payCol = $pick(['payment_method', 'payment_status']);
+        $statusCol = $pick(['status']);
+        $totalCol = $pick(['total_amount']);
+        $paidCol = $pick(['total_paid_amount']);
+        $dateCol = $pick(['date_created', 'order_date']);
+        $hasCompany = in_array('company_id', $cols, true);
+        $hasTimestamps = in_array('created_at', $cols, true);
+
+        if (!$keyCol) {
+            return $this->fail(new \RuntimeException('A tabela orders não possui coluna de identificador (external_id/ml_order_id).'));
+        }
+
+        // Arquivo vem por ITEM do pedido (várias linhas por "Número Pedido",
+        // com os campos de pedido idênticos entre elas) — agrupa em memória
+        // antes de gravar. Volume esperado é o de um período de vendas, não
+        // o catálogo inteiro, então não precisa de streaming/lote.
+        $porPedido = [];
+        $rows = 0; $trocas = 0;
+        foreach ($this->readRows($path) as $row) {
+            $rows++; $this->tick();
+
+            $numero = $this->col($row, ['Número Pedido', 'Numero Pedido']);
+            if ($numero === null || $numero === '') continue;
+
+            $tipo = $this->col($row, ['Tipo do Pedido']);
+            if ($tipo !== null && mb_strtolower(trim($tipo)) === 'troca') {
+                $trocas++;
+                continue;
+            }
+
+            if (!isset($porPedido[$numero])) {
+                $porPedido[$numero] = $row;
+            }
+        }
+
+        $created = 0; $updated = 0; $skipped = 0;
+        DB::beginTransaction();
+        try {
+            foreach ($porPedido as $numero => $row) {
+                $total = $this->num($this->col($row, ['Valor Total Pedido Lojista', 'Valor Total Pedido']));
+                if ($total === null) { $skipped++; continue; }
+
+                $marketplace = $this->col($row, ['Site Origem da Venda']);
+
+                $payload = [$keyCol => $numero];
+                if ($nameCol) $payload[$nameCol] = $this->col($row, ['Nome do Comprador']);
+                if ($docCol) $payload[$docCol] = $this->col($row, ['CPF/CNPJ do Comprador']);
+                if ($channelCol) $payload[$channelCol] = $marketplace ? ucwords(mb_strtolower($marketplace)) : 'Netshoes';
+                if ($payCol) $payload[$payCol] = $this->col($row, ['Forma de pagamento']);
+                if ($statusCol) $payload[$statusCol] = $this->mapStatus($this->col($row, ['Status do Pedido']));
+                if ($totalCol) $payload[$totalCol] = $total;
+                if ($paidCol) $payload[$paidCol] = $total;
+                if ($dateCol) $payload[$dateCol] = $this->parseDate($this->col($row, ['Data da Compra']));
+
+                $query = DB::table('orders')->where($keyCol, $numero);
+                if ($hasCompany) $query->where('company_id', $companyId);
+                $existing = $query->first();
+
+                if ($existing) {
+                    if ($hasTimestamps) $payload['updated_at'] = now();
+                    (clone $query)->update($payload);
+                    $updated++;
+                } else {
+                    if ($hasCompany) $payload['company_id'] = $companyId;
+                    if ($hasTimestamps) { $payload['created_at'] = now(); $payload['updated_at'] = now(); }
+                    DB::table('orders')->insert($payload);
+                    $created++;
+                }
+            }
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return $this->fail($e);
+        }
+
+        return [
+            'ok' => true,
+            'rows' => $rows,
+            'updated' => $updated,
+            'created' => $created,
+            'skipped' => $skipped,
+            'message' => "Vendas Netshoes: {$created} criados, {$updated} atualizados, {$skipped} ignorados"
+                . ($trocas > 0 ? ", {$trocas} trocas ignoradas" : '')
+                . " (de {$rows} linhas de item, " . count($porPedido) . " pedidos únicos).",
+        ];
+    }
+
+    /** Converte a situação do pedido Netshoes para o status canônico do sistema. */
+    private function mapStatus(?string $situacao): string
+    {
+        $s = mb_strtolower(trim((string) $situacao));
+        return match (true) {
+            str_contains($s, 'cancel') => 'cancelled',
+            str_contains($s, 'entreg') => 'delivered',
+            str_contains($s, 'envi') || str_contains($s, 'transito') || str_contains($s, 'trânsito') || str_contains($s, 'postad') => 'shipped',
+            str_contains($s, 'faturad') || str_contains($s, 'aprovad') || str_contains($s, 'pago') => 'approved',
+            default => 'pending',
+        };
+    }
+
+    /** Datas do export de Pedidos vêm como "DD/MM/AAAA HH:MM:SS". */
+    private function parseDate(?string $value): ?string
+    {
+        if (!$value) return null;
+        foreach (['!d/m/Y H:i:s', '!d/m/Y H:i', '!d/m/Y'] as $fmt) {
+            try {
+                return Carbon::createFromFormat($fmt, trim($value))->toDateTimeString();
+            } catch (\Throwable $e) {
+                // tenta o próximo formato
+            }
+        }
+        return null;
     }
 
     /* ============================================================

@@ -22,11 +22,17 @@
                 </Link>
             </div>
 
-            <div class="bg-orange-50 border border-orange-200 text-orange-800 text-sm px-4 py-3 rounded-xl mb-6">
+            <div v-if="config.kind === 'orders'" class="bg-orange-50 border border-orange-200 text-orange-800 text-sm px-4 py-3 rounded-xl mb-6">
+                <i class="fa-solid fa-circle-info mr-2"></i>
+                Cria/atualiza <b>pedidos</b> — não mexe no catálogo de produtos. O arquivo vem por item do pedido;
+                esta importação agrupa por <code class="k">Número Pedido</code> antes de gravar. Pedidos do tipo
+                <b>Troca</b> são ignorados.
+            </div>
+            <div v-else class="bg-orange-50 border border-orange-200 text-orange-800 text-sm px-4 py-3 rounded-xl mb-6">
                 <i class="fa-solid fa-circle-info mr-2"></i>
                 Importação <b>só do canal Netshoes</b>: cruza pelo <code class="k">sku</code> do produto (igual ao
-                <code class="k">{{ type === 'estoque' ? 'Sku Seller' : 'ID Sku' }}</code> da planilha). <b>Não cria produtos</b>
-                nem altera o catálogo — o catálogo continua vindo do Magazord.
+                <code class="k">{{ type === 'estoque' || type === 'precos' ? 'Sku Seller' : 'ID Sku' }}</code> da planilha).
+                <b>Não cria produtos</b> nem altera o catálogo — o catálogo continua vindo do Magazord.
             </div>
 
             <div v-if="flash.error" class="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-6">

@@ -112,9 +112,9 @@ Route::middleware(['auth'])->group(function () {
         // Importações Netshoes — só canal (netshoes_*), cruza pelo sku do produto
         Route::prefix('imports/netshoes')->name('netshoes.')->group(function () {
             Route::get('/{type}', [NetshoesImportController::class, 'show'])
-                ->whereIn('type', ['produtos', 'estoque'])->name('show');
+                ->whereIn('type', ['produtos', 'estoque', 'precos', 'vendas'])->name('show');
             Route::post('/{type}', [NetshoesImportController::class, 'import'])
-                ->whereIn('type', ['produtos', 'estoque'])->name('import');
+                ->whereIn('type', ['produtos', 'estoque', 'precos', 'vendas'])->name('import');
         });
 
         // Monitoramento de Preços (competitividade estilo Hooklab)
