@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Product;
 use App\Models\OrderItem;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
@@ -24,9 +23,12 @@ class InventoryIntelligenceService
     public function getStockOutPredictions(int $companyId, int $limit = 5)
     {
         $thirtyDaysAgo = Carbon::now()->subDays(30);
+        $orderDateCol = $this->orderDateColumn();
 
-        // Busca produtos ativos com seu estoque atual e média de vendas 30 dias
-        $products = Product::where('company_id', $companyId)
+        // DB::table (não o model Product) evita o eager-load de medias/channel_settings
+        // ($with) que já derrubou a tela de Aging com 500 (ver CLAUDE.md §4).
+        $products = DB::table('products')
+            ->where('company_id', $companyId)
             ->where('status', 'active')
             ->get();
 
@@ -38,7 +40,7 @@ class InventoryIntelligenceService
                 ->join('orders', 'order_items.order_id', '=', 'orders.id')
                 ->where('order_items.product_id', $product->id)
                 ->where('orders.company_id', $companyId)
-                ->where('orders.created_at', '>=', $thirtyDaysAgo)
+                ->where("orders.$orderDateCol", '>=', $thirtyDaysAgo)
                 ->whereIn('orders.status', ['paid', 'shipped', 'delivered', 'accredited'])
                 ->sum('order_items.quantity');
 
@@ -53,7 +55,7 @@ class InventoryIntelligenceService
 
             $predictions[] = [
                 'id' => $product->id,
-                'name' => $product->name,
+                'name' => $product->title,
                 'sku' => $product->sku,
                 'current_stock' => $currentStock,
                 'daily_velocity' => round($dailyVelocity, 2),
@@ -78,32 +80,35 @@ class InventoryIntelligenceService
     public function getAggregatedInventoryStats(int $companyId): Collection
     {
         $thirtyDaysAgo = Carbon::now()->subDays(30);
+        $orderDateCol = $this->orderDateColumn();
 
-        // Busca produtos ativos com estoque e performance de vendas
-        return Product::where('company_id', $companyId)
+        // DB::table (não o model Product) evita o eager-load de medias/channel_settings
+        // ($with) que já derrubou a tela de Aging com 500 (ver CLAUDE.md §4).
+        return DB::table('products')
+            ->where('company_id', $companyId)
             ->where('status', 'active')
             ->get()
-            ->map(function ($product) use ($companyId, $thirtyDaysAgo) {
+            ->map(function ($product) use ($companyId, $thirtyDaysAgo, $orderDateCol) {
                 // Soma de quantidades vendidas nos últimos 30 dias (pedidos confirmados/pagos)
                 $salesLast30Days = DB::table('order_items')
                     ->join('orders', 'order_items.order_id', '=', 'orders.id')
                     ->where('order_items.product_id', $product->id)
                     ->where('orders.company_id', $companyId)
-                    ->where('orders.created_at', '>=', $thirtyDaysAgo)
+                    ->where("orders.$orderDateCol", '>=', $thirtyDaysAgo)
                     ->whereIn('orders.status', ['paid', 'shipped', 'delivered', 'accredited'])
                     ->sum('order_items.quantity');
 
                 $dailyVelocity = $salesLast30Days / 30;
                 $currentStock = (int)$product->stock_quantity;
                 $daysOfStock = $dailyVelocity > 0 ? $currentStock / $dailyVelocity : 999;
-                
+
                 // Cálculos financeiros do inventário
                 $inventoryValue = $currentStock * (float)$product->cost_price;
                 $revenue30d = $salesLast30Days * (float)$product->sale_price;
-                
+
                 return (object) [
                     'id' => $product->id,
-                    'name' => $product->name,
+                    'name' => $product->title,
                     'sku' => $product->sku,
                     'stock' => $currentStock,
                     'velocity' => round($dailyVelocity, 2),
@@ -132,5 +137,18 @@ class InventoryIntelligenceService
             return ceil($velocity * 45);
         }
         return 0;
+    }
+
+    /**
+     * date_created é a data real do pedido; created_at é o timestamp da importação
+     * (ver CLAUDE.md §5.1) — usar created_at aqui contaria vendas antigas importadas
+     * há pouco como se tivessem ocorrido nos últimos 30 dias.
+     */
+    private function orderDateColumn(): string
+    {
+        $cols = \Illuminate\Support\Facades\Schema::getColumnListing('orders');
+        $has = fn ($c) => in_array($c, $cols, true);
+
+        return $has('date_created') ? 'date_created' : ($has('order_date') ? 'order_date' : 'created_at');
     }
 }

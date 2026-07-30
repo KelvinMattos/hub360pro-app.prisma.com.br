@@ -44,7 +44,7 @@ TEXT;
         try {
             // 3. Chamada à API do Gemini
             $response = Http::withHeaders(['Content-Type' => 'application/json'])
-                ->post("[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){$keyData->api_key}", [
+                ->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={$keyData->api_key}", [
                     'contents' => [
                         ['parts' => [['text' => $prompt]]]
                     ]

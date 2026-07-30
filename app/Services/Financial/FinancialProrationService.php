@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\FixedExpense;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Service de Inteligência Financeira e Rateios.
@@ -24,7 +25,7 @@ class FinancialProrationService
 
         // 1. Métricas de Vendas (Baseado em Pedidos Pagos/Enviados)
         $ordersQuery = Order::where('company_id', $companyId)
-            ->whereBetween('created_at', [$startDate, $endDate])
+            ->whereBetween($this->orderDateColumn(), [$startDate, $endDate])
             ->whereIn('status', ['paid', 'shipped', 'delivered', 'accredited']);
 
         $orderCount = (clone $ordersQuery)->count();
@@ -87,7 +88,7 @@ class FinancialProrationService
 
         // Total de Pedidos Faturáveis no mês
         $orderCount = Order::where('company_id', $companyId)
-            ->whereBetween('created_at', [$startDate, $endDate])
+            ->whereBetween($this->orderDateColumn(), [$startDate, $endDate])
             ->whereIn('status', ['paid', 'shipped', 'delivered', 'accredited'])
             ->count();
 
@@ -99,5 +100,17 @@ class FinancialProrationService
             ->sum('amount') ?: 0;
 
         return round($totalFixedCosts / $orderCount, 2);
+    }
+
+    /**
+     * date_created é a data real do pedido; created_at é o timestamp da importação
+     * (ver CLAUDE.md §5.1) — usar created_at aqui jogaria vendas antigas no mês da importação.
+     */
+    private function orderDateColumn(): string
+    {
+        $cols = Schema::getColumnListing('orders');
+        $has = fn ($c) => in_array($c, $cols, true);
+
+        return $has('date_created') ? 'date_created' : ($has('order_date') ? 'order_date' : 'created_at');
     }
 }

@@ -17,7 +17,18 @@ class SuperAdminController extends Controller
         if (Auth::id() !== 1)
             abort(403);
 
-        $keys = DB::table('system_ai_keys')->orderBy('provider')->get();
+        // Nunca manda a api_key inteira pro navegador — só os últimos 8
+        // caracteres, que é tudo que a tela mostra (Admin/AiConfig.vue).
+        $keys = DB::table('system_ai_keys')
+            ->orderBy('provider')
+            ->get()
+            ->map(function ($key) {
+                // str_pad() com um caractere multibyte corta no meio do byte e quebra o
+                // UTF-8 (json_encode falha em silêncio) — usa str_repeat pra evitar isso.
+                $tail = substr($key->api_key, -8);
+                $key->api_key = str_repeat('•', max(0, strlen($key->api_key) - strlen($tail))) . $tail;
+                return $key;
+            });
         $rates = DB::table('marketplace_benchmark_rates')->get();
 
         return Inertia::render('Admin/AiConfig', [

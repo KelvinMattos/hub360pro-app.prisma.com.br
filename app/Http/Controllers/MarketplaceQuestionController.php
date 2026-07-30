@@ -32,8 +32,13 @@ class MarketplaceQuestionController extends Controller
 
     public function sync()
     {
-        $this->service->syncAllQuestions(Auth::user()->company_id);
-        return redirect()->back()->with('success', 'Sincronização iniciada.');
+        $result = $this->service->syncAllQuestions(Auth::user()->company_id);
+
+        if ($result['ok']) {
+            return redirect()->back()->with('success', $result['message']);
+        }
+
+        return redirect()->back()->with('error', $result['message']);
     }
 
     public function answer(Request $request, MarketplaceQuestion $question)

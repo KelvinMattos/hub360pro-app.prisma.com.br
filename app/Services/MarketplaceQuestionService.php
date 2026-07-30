@@ -17,19 +17,44 @@ class MarketplaceQuestionService
         $this->automationService = $automationService;
     }
 
-    public function syncAllQuestions(int $companyId)
+    /**
+     * @return array{ok: bool, synced: int, errors: array<string>, message: string}
+     */
+    public function syncAllQuestions(int $companyId): array
     {
         $credentials = Integration::where('company_id', $companyId)
             ->where('is_active', true)
             ->where('platform', '!=', 'bling')
             ->get();
 
-        foreach ($credentials as $credential) {
-            $this->syncQuestions($credential);
+        if ($credentials->isEmpty()) {
+            return ['ok' => false, 'synced' => 0, 'errors' => [], 'message' => 'Nenhuma integração ativa encontrada.'];
         }
+
+        $synced = 0;
+        $errors = [];
+
+        foreach ($credentials as $credential) {
+            $result = $this->syncQuestions($credential);
+            if ($result['ok']) {
+                $synced++;
+            } else {
+                $errors[] = "{$credential->account_nickname} ({$credential->platform}): {$result['error']}";
+            }
+        }
+
+        $ok = $synced > 0;
+        $message = $ok
+            ? ($errors ? "Sincronizado com falha parcial em: " . implode('; ', $errors) : 'Sincronização concluída.')
+            : ('Falha ao sincronizar todas as integrações: ' . implode('; ', $errors));
+
+        return ['ok' => $ok, 'synced' => $synced, 'errors' => $errors, 'message' => $message];
     }
 
-    public function syncQuestions(Integration $credential)
+    /**
+     * @return array{ok: bool, error: ?string}
+     */
+    public function syncQuestions(Integration $credential): array
     {
         try {
             $adapter = $this->manager->adapter($credential);
@@ -53,8 +78,11 @@ class MarketplaceQuestionService
                     $this->automationService->process($question);
                 }
             }
+
+            return ['ok' => true, 'error' => null];
         } catch (\Exception $e) {
             Log::error("Error syncing questions for integration {$credential->id}: " . $e->getMessage());
+            return ['ok' => false, 'error' => $e->getMessage()];
         }
     }
 
