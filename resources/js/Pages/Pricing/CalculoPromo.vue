@@ -76,7 +76,11 @@
                             <td class="td-r">{{ pct(r.perc_desc) }}</td>
                             <td class="td-r font-bold" :class="r.promo_menor === 'SIM' ? 'text-red-500' : 'text-emerald-600'">{{ r.promo_menor || '—' }}</td>
                         </tr>
-                        <tr v-if="!rows.length"><td colspan="12" class="text-center text-slate-400 py-10">Nenhum produto. Importe Custos/Preços em Importações Magazord.</td></tr>
+                        <tr v-if="!rows.length"><td colspan="12" class="text-center text-slate-400 py-10">
+                            Nenhum produto vinculado ao canal <b>{{ channel.label }}</b>. Só aparecem SKUs com preço
+                            preenchido para esse canal — importe a planilha de Preços (Magazord ou Netshoes) com essa
+                            coluna preenchida, ou confira em <Link :href="route('pricing.channel-prices')" class="underline">Preços por Canal</Link>.
+                        </td></tr>
                     </tbody>
                 </table>
             </div>

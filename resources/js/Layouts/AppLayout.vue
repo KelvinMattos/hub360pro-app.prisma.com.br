@@ -135,6 +135,7 @@ const navigationConfig = [
             { label: 'Segmentação de SKU', route: 'segmentation.index', icon: 'fa-solid fa-layer-group' },
             { label: 'Calculadora de Canais', route: 'calculator.index', icon: 'fa-solid fa-calculator' },
             { label: 'Cálculo Promo', route: 'pricing.calculo-promo', activePattern: 'pricing.calculo-promo', icon: 'fa-solid fa-tags' },
+            { label: 'Preços por Canal', route: 'pricing.channel-prices', icon: 'fa-solid fa-table-cells' },
             { label: 'Aging de Estoque', route: 'inventory.aging', icon: 'fa-solid fa-hourglass-half' },
             { label: 'Config. de Canais', route: 'pricing.channels', icon: 'fa-solid fa-sliders' },
             { label: 'Simulador 360', route: 'pricing.simulator', icon: 'fa-solid fa-flask' },
