@@ -51,7 +51,7 @@
                     <input id="createMissing" type="checkbox" v-model="form.create_missing" class="mt-1 accent-blue-500">
                     <label for="createMissing" class="text-sm text-slate-600">
                         Criar registros que ainda não existem no banco
-                        <span class="text-slate-400">({{ ['vendas', 'vendas_itens'].includes(type) ? 'pedidos novos' : 'produtos novos' }}).</span>
+                        <span class="text-slate-400">({{ ['vendas', 'vendas_itens', 'vendas_detalhes'].includes(type) ? 'pedidos novos' : 'produtos novos' }}).</span>
                     </label>
                 </div>
 

@@ -202,6 +202,7 @@ const navigationConfig = [
             { label: 'Importar Produtos & Datas', route: 'magazord.show', params: { type: 'produtos' }, icon: 'fa-solid fa-calendar-day' },
             { label: 'Importar Vendas', route: 'magazord.show', params: { type: 'vendas' }, icon: 'fa-solid fa-cart-shopping' },
             { label: 'Importar Vendas por Item', route: 'magazord.show', params: { type: 'vendas_itens' }, icon: 'fa-solid fa-boxes-packing' },
+            { label: 'Importar Detalhes do Pedido', route: 'magazord.show', params: { type: 'vendas_detalhes' }, icon: 'fa-solid fa-location-dot' },
         ]
     },
     {

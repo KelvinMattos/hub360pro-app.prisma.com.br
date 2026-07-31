@@ -101,6 +101,16 @@ class MagazordImportController extends Controller
             'columns' => ['Pedido', 'Data/Hora', 'Situação', 'Canal', 'SKU', 'Produto', 'Quantidade', 'Valor Unitário', 'Marca', 'Categoria Principal'],
             'can_create' => true,
         ],
+        'vendas_detalhes' => [
+            'title' => 'Importar Detalhes do Pedido (Consulta Dinâmica)',
+            'icon' => 'fa-solid fa-location-dot',
+            'target' => 'orders + customers (cidade/estado)',
+            'key_label' => 'Pedido',
+            'value_label' => 'Cidade · Estado · Vlr Total',
+            'description' => 'Modelo "Consulta Dinâmica – Detalhes do Pedido" (FADERIM → Consultas Dinâmicas). Cria/atualiza pedido e cliente com o dado que os outros modelos de Vendas não trazem: cidade e estado do comprador — essencial pro relatório de Vendas por Região, que hoje fica vazio pra pedidos Magazord por falta exatamente desse dado. Cruza pelo "Pedido".',
+            'columns' => ['Pedido', 'Data', 'Origem', 'Forma Pgto', 'Situação', 'Pessoa', 'CPF/CNPJ', 'Cidade', 'Estado', 'Vlr Produto', 'Vlr Acréscimo', 'Vlr Desconto', 'Vlr Frete', 'Vlr Total'],
+            'can_create' => true,
+        ],
     ];
 
     /* ---------------- progresso ao vivo (cache de arquivo) ---------------- */
@@ -213,6 +223,7 @@ class MagazordImportController extends Controller
             'produtos' => $this->importProdutos($this->readRows($path), $createMissing),
             'vendas' => $this->importVendas($this->readRows($path), $createMissing),
             'vendas_itens' => $this->importVendasItens($this->readRows($path), $createMissing),
+            'vendas_detalhes' => $this->importVendasDetalhes($this->readRows($path), $createMissing),
         };
 
         $this->writeProgress('done', ['result' => $summary]);
@@ -746,6 +757,113 @@ class MagazordImportController extends Controller
             'created' => $created,
             'skipped' => $skipped,
             'message' => "Vendas importadas: {$created} criadas, {$updated} atualizadas, {$skipped} ignoradas (de {$rows} linhas).",
+        ];
+    }
+
+    /**
+     * DETALHES DO PEDIDO (Consulta Dinâmica "Detalhes do Pedido", FADERIM) ->
+     * orders + customers.
+     *
+     * É a única fonte de Vendas que traz cidade e estado do comprador — os
+     * outros importadores (Magazord "vendas", "vendas_itens", Netshoes)
+     * nunca capturam essa informação, então o relatório de Vendas por Região
+     * (Central de Vendas) ficava vazio pra praticamente todo o catálogo de
+     * pedidos. Vem uma linha por PEDIDO (não por item). Alimenta o CPF via
+     * CustomerIdentityService, igual aos outros dois importadores de Vendas.
+     */
+    private function importVendasDetalhes(iterable $records, bool $createMissing): array
+    {
+        $companyId = Auth::user()->company_id;
+        $updated = 0; $created = 0; $skipped = 0; $rows = 0;
+
+        $cols = Schema::getColumnListing('orders');
+        $pick = fn (array $cands) => collect($cands)->first(fn ($c) => in_array($c, $cols, true));
+        $keyCol = $pick(['external_id', 'ml_order_id']);
+        $nameCol = $pick(['customer_name', 'buyer_nickname']);
+        $docCol = $pick(['customer_doc', 'billing_doc_number']);
+        $channelCol = $pick(['selling_channel']);
+        $payCol = $pick(['payment_method', 'payment_status']);
+        $statusCol = $pick(['status']);
+        $totalCol = $pick(['total_amount']);
+        $paidCol = $pick(['total_paid_amount']);
+        $shippingCol = $pick(['shipping_cost']);
+        $dateCol = $pick(['date_created', 'order_date']);
+        $hasCompany = in_array('company_id', $cols, true);
+        $hasTimestamps = in_array('created_at', $cols, true);
+        $hasCustomerId = in_array('customer_id', $cols, true);
+        $customerIdentity = $hasCustomerId ? app(CustomerIdentityService::class) : null;
+
+        if (!$keyCol) {
+            return $this->fail(new \RuntimeException('A tabela orders não possui coluna de identificador (external_id/ml_order_id).'));
+        }
+
+        DB::beginTransaction();
+        try {
+            foreach ($records as $row) {
+                $rows++; $this->tick();
+                $externalId = $this->col($row, ['Pedido']);
+                if ($externalId === null || $externalId === '') { $skipped++; continue; }
+
+                $total = $this->brNumber($this->col($row, ['Vlr Total'])) ?? 0;
+                $frete = $this->brNumber($this->col($row, ['Vlr Frete']));
+                $docRaw = $this->col($row, ['CPF/CNPJ']);
+                $nameRaw = $this->col($row, ['Pessoa']);
+                $channelRaw = $this->col($row, ['Origem']);
+                $cityRaw = $this->col($row, ['Cidade']);
+                $stateRaw = $this->col($row, ['Estado']);
+
+                $payload = [$keyCol => $externalId];
+                if ($nameCol)     $payload[$nameCol]     = $nameRaw;
+                if ($docCol)      $payload[$docCol]      = $docRaw;
+                if ($channelCol)  $payload[$channelCol]  = $channelRaw;
+                if ($payCol)      $payload[$payCol]      = $this->col($row, ['Forma Pgto']);
+                if ($statusCol)   $payload[$statusCol]   = $this->mapStatus(null, $this->col($row, ['Situação']));
+                if ($totalCol)    $payload[$totalCol]    = $total;
+                if ($paidCol)     $payload[$paidCol]     = $total;
+                if ($shippingCol && $frete !== null) $payload[$shippingCol] = $frete;
+                if ($dateCol)     $payload[$dateCol]     = $this->parseDate($this->col($row, ['Data']));
+
+                // CPF + cidade/estado é a chave que une o mesmo cliente entre
+                // canais E alimenta a região — ver CustomerIdentityService.
+                if ($customerIdentity) {
+                    $customer = $customerIdentity->findOrCreate($companyId, [
+                        'doc_number' => $docRaw, 'name' => $nameRaw, 'city' => $cityRaw, 'state' => $stateRaw, 'origin_channel' => $channelRaw,
+                    ]);
+                    if ($customer) {
+                        $payload['customer_id'] = $customer->id;
+                    }
+                }
+
+                $query = DB::table('orders')->where($keyCol, $externalId);
+                if ($hasCompany) $query->where('company_id', $companyId);
+                $existing = $query->first();
+
+                if ($existing) {
+                    if ($hasTimestamps) $payload['updated_at'] = now();
+                    (clone $query)->update($payload);
+                    $updated++;
+                } elseif ($createMissing) {
+                    if ($hasCompany) $payload['company_id'] = $companyId;
+                    if ($hasTimestamps) { $payload['created_at'] = now(); $payload['updated_at'] = now(); }
+                    DB::table('orders')->insert($payload);
+                    $created++;
+                } else {
+                    $skipped++;
+                }
+            }
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return $this->fail($e);
+        }
+
+        return [
+            'ok' => true,
+            'rows' => $rows,
+            'updated' => $updated,
+            'created' => $created,
+            'skipped' => $skipped,
+            'message' => "Detalhes de pedido importados: {$created} criados, {$updated} atualizados, {$skipped} ignorados (de {$rows} linhas).",
         ];
     }
 

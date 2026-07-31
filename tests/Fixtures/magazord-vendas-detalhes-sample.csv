@@ -1,0 +1,4 @@
+Pedido;Data;Origem;Forma Pgto;Situação;Pessoa;CPF/CNPJ;Cidade;Estado;Vlr Produto;Vlr Acréscimo;Vlr Desconto;Vlr Frete;Vlr Total
+6001;05/07/2026;Mercado Livre;1 Vez/Cartão;Entregue;Maria Compradora;111.111.111-11;São Paulo;SP;150,0000;0,0000;0,0000;20,0000;170,0000
+6002;06/07/2026;Centauro;;Cancelado Pagamento;Joao Teste;222.222.222-22;Salvador;BA;80,0000;0,0000;10,0000;0,0000;70,0000
+6003;07/07/2026;Mercado Livre;1 Vez/Cartão;Entregue;Maria Compradora;11111111111;São Paulo;SP;90,0000;0,0000;0,0000;10,0000;100,0000
