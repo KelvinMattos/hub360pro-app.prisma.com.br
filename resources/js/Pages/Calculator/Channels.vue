@@ -12,6 +12,10 @@
                 </p>
             </div>
 
+            <div v-if="errorMessage" class="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-6">
+                <i class="fa-solid fa-circle-exclamation mr-2"></i>{{ errorMessage }}
+            </div>
+
             <!-- Entradas -->
             <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-6">
                 <div class="grid grid-cols-2 md:grid-cols-5 gap-5">
@@ -124,6 +128,7 @@ const channels = reactive(props.defaults.channels.map(c => ({
 
 const rows = ref([]);
 const loading = ref(false);
+const errorMessage = ref(null);
 let debounceTimer = null;
 let requestSeq = 0;
 
@@ -152,10 +157,26 @@ async function runCompute() {
         });
         if (seq === requestSeq) {
             rows.value = data.rows;
+            errorMessage.value = null;
         }
     } catch (e) {
-        // Falha de transporte (ex.: sessão expirada) não deve mostrar dado
-        // errado — apenas mantém o último resultado válido em tela.
+        // Nunca falhar em silêncio (CLAUDE.md §2.1): antes só ia pro console —
+        // a tela ficava com a tabela vazia sem explicar por quê, indistinguível
+        // de "não funciona". Mostra o status real (camada de transporte vs.
+        // validação), nunca um dado inventado.
+        if (seq === requestSeq) {
+            const status = e.response?.status;
+            if (status === 419) {
+                errorMessage.value = 'Sessão expirada — recarregue a página e tente novamente.';
+            } else if (status === 422) {
+                const details = Object.values(e.response?.data?.errors ?? {}).flat().join(' ');
+                errorMessage.value = 'Dados inválidos' + (details ? `: ${details}` : '.');
+            } else if (status) {
+                errorMessage.value = `Falha ao calcular (HTTP ${status}). Tente novamente.`;
+            } else {
+                errorMessage.value = 'Falha de conexão ao calcular — verifique sua internet e tente novamente.';
+            }
+        }
         console.error('Falha ao calcular retorno por canal:', e);
     } finally {
         if (seq === requestSeq) loading.value = false;
