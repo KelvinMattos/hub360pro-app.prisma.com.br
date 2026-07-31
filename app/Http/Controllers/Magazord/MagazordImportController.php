@@ -90,6 +90,16 @@ class MagazordImportController extends Controller
             'columns' => ['Pedido Id', 'Código', 'Data/Hora', 'Cliente', 'CPF/CNPJ', 'Situação', 'Marketplace', 'Forma de Pagamento', 'Valor Total Pedido'],
             'can_create' => true,
         ],
+        'vendas_itens' => [
+            'title' => 'Importar Vendas por Item (Consulta Dinâmica)',
+            'icon' => 'fa-solid fa-boxes-packing',
+            'target' => 'orders + order_items',
+            'key_label' => 'Pedido',
+            'value_label' => 'SKU · Quantidade · Valor Unitário',
+            'description' => 'Modelo "Consulta Dinâmica – Produto por Pedido" (FADERIM → Consultas Dinâmicas). Vem uma linha por ITEM vendido — cria/atualiza o pedido (cruzando por "Pedido") e grava uma linha em order_items por SKU, com quantidade e valor unitário reais. É a única fonte de Vendas que alimenta a velocidade por SKU do motor de Reposição Inteligente — os outros modelos de Vendas gravam só o cabeçalho do pedido.',
+            'columns' => ['Pedido', 'Data/Hora', 'Situação', 'Canal', 'SKU', 'Produto', 'Quantidade', 'Valor Unitário', 'Marca', 'Categoria Principal'],
+            'can_create' => true,
+        ],
     ];
 
     /* ---------------- progresso ao vivo (cache de arquivo) ---------------- */
@@ -201,6 +211,7 @@ class MagazordImportController extends Controller
             'descontos' => $this->importDescontos($this->readRows($path)),
             'produtos' => $this->importProdutos($this->readRows($path), $createMissing),
             'vendas' => $this->importVendas($this->readRows($path), $createMissing),
+            'vendas_itens' => $this->importVendasItens($this->readRows($path), $createMissing),
         };
 
         $this->writeProgress('done', ['result' => $summary]);
@@ -718,14 +729,187 @@ class MagazordImportController extends Controller
         ];
     }
 
-    /** Converte a situação do Magazord para o status canônico do sistema. */
+    /**
+     * VENDAS POR ITEM (Consulta Dinâmica "Produto por Pedido", FADERIM) ->
+     * orders + order_items.
+     *
+     * É a única fonte de Vendas do sistema que traz SKU + quantidade + valor
+     * unitário por linha — os outros dois importadores de Vendas (Magazord
+     * "vendas" e Netshoes "vendas") gravam só o cabeçalho do pedido, então
+     * `order_items` nunca era escrita e o motor de Reposição Inteligente via
+     * velocity=0 em 100% do catálogo (ver ReplenishmentEngine).
+     *
+     * Vem uma linha por item — agrupa em memória por "Pedido" antes de
+     * gravar (mesmo padrão do importador de Vendas Netshoes). Um mesmo SKU
+     * pode aparecer mais de uma vez no mesmo pedido no arquivo real; soma a
+     * quantidade em vez de duplicar a linha, pra reimportação ficar idempotente.
+     */
+    private function importVendasItens(iterable $records, bool $createMissing): array
+    {
+        $companyId = Auth::user()->company_id;
+
+        $skuToProduct = Product::where('company_id', $companyId)
+            ->whereNotNull('sku')
+            ->get(['id', 'sku', 'cost_price'])
+            ->keyBy('sku');
+
+        $orderCols = Schema::getColumnListing('orders');
+        $pick = fn (array $cands) => collect($cands)->first(fn ($c) => in_array($c, $orderCols, true));
+        $keyCol = $pick(['external_id', 'ml_order_id']);
+        $channelCol = $pick(['selling_channel']);
+        $statusCol = $pick(['status']);
+        $totalCol = $pick(['total_amount']);
+        $paidCol = $pick(['total_paid_amount']);
+        $dateCol = $pick(['date_created', 'order_date']);
+        $hasCompany = in_array('company_id', $orderCols, true);
+        $hasTimestamps = in_array('created_at', $orderCols, true);
+
+        if (!$keyCol) {
+            return $this->fail(new \RuntimeException('A tabela orders não possui coluna de identificador (external_id/ml_order_id).'));
+        }
+
+        $porPedido = [];
+        $rows = 0;
+        try {
+            foreach ($records as $row) {
+                $rows++; $this->tick();
+
+                $pedido = $this->col($row, ['Pedido']);
+                if ($pedido === null || $pedido === '') continue;
+
+                if (!isset($porPedido[$pedido])) {
+                    $porPedido[$pedido] = ['header' => $row, 'items' => []];
+                }
+
+                $sku = $this->col($row, ['SKU']);
+                if ($sku === null || $sku === '') continue;
+
+                $qty = (int) round($this->brNumber($this->col($row, ['Quantidade'])) ?? 0);
+                $unitPrice = $this->brNumber($this->col($row, ['Valor Unitário'])) ?? 0.0;
+
+                if (!isset($porPedido[$pedido]['items'][$sku])) {
+                    $porPedido[$pedido]['items'][$sku] = [
+                        'sku' => $sku,
+                        'title' => $this->col($row, ['Produto']),
+                        'quantity' => 0,
+                        'unit_price' => $unitPrice,
+                    ];
+                }
+                $porPedido[$pedido]['items'][$sku]['quantity'] += $qty;
+            }
+        } catch (\Throwable $e) {
+            // Nada foi gravado ainda (leitura/agrupamento) — sem rollback a fazer.
+            return $this->fail($e);
+        }
+
+        $ordersCreated = 0; $ordersUpdated = 0; $ordersSkipped = 0; $itemsWritten = 0; $skusNotFound = 0;
+
+        DB::beginTransaction();
+        try {
+            foreach ($porPedido as $pedido => $group) {
+                $header = $group['header'];
+
+                $payload = [$keyCol => $pedido];
+                if ($channelCol) $payload[$channelCol] = $this->col($header, ['Canal']) ?: null;
+                if ($statusCol) $payload[$statusCol] = $this->mapStatus(null, $this->col($header, ['Situação']));
+                if ($dateCol) $payload[$dateCol] = $this->parseDate($this->col($header, ['Data/Hora']));
+
+                $query = DB::table('orders')->where($keyCol, $pedido);
+                if ($hasCompany) $query->where('company_id', $companyId);
+                $existing = $query->first();
+
+                if ($existing) {
+                    if ($hasTimestamps) $payload['updated_at'] = now();
+                    (clone $query)->update($payload);
+                    $orderId = $existing->id;
+                    $ordersUpdated++;
+                } elseif ($createMissing) {
+                    $total = 0.0;
+                    foreach ($group['items'] as $item) {
+                        $total += $item['quantity'] * $item['unit_price'];
+                    }
+                    if ($totalCol) $payload[$totalCol] = round($total, 2);
+                    if ($paidCol) $payload[$paidCol] = round($total, 2);
+                    if ($hasCompany) $payload['company_id'] = $companyId;
+                    if ($hasTimestamps) { $payload['created_at'] = now(); $payload['updated_at'] = now(); }
+                    $orderId = DB::table('orders')->insertGetId($payload);
+                    $ordersCreated++;
+                } else {
+                    $ordersSkipped++;
+                    continue;
+                }
+
+                foreach ($group['items'] as $item) {
+                    $product = $skuToProduct->get($item['sku']);
+                    if (!$product) $skusNotFound++;
+
+                    // Custo real do produto quando conhecido; senão estimativa de 50% do
+                    // preço de venda (mesmo fallback já usado em SyncOrdersCommand::saveOrders()
+                    // pra pedidos ML sem produto cadastrado — não é precisão inventada, é o
+                    // mesmo critério já em produção).
+                    $unitCost = ($product && (float) $product->cost_price > 0)
+                        ? (float) $product->cost_price
+                        : $item['unit_price'] * 0.5;
+
+                    $itemPayload = [
+                        'product_id' => $product?->id,
+                        'title' => $item['title'],
+                        'quantity' => $item['quantity'],
+                        'unit_price' => $item['unit_price'],
+                        'unit_cost' => $unitCost,
+                    ];
+
+                    $itemQuery = DB::table('order_items')->where('order_id', $orderId)->where('sku', $item['sku']);
+                    $existingItem = $itemQuery->first();
+                    if ($existingItem) {
+                        $itemPayload['updated_at'] = now();
+                        (clone $itemQuery)->update($itemPayload);
+                    } else {
+                        $itemPayload['order_id'] = $orderId;
+                        $itemPayload['sku'] = $item['sku'];
+                        $itemPayload['created_at'] = now();
+                        $itemPayload['updated_at'] = now();
+                        DB::table('order_items')->insert($itemPayload);
+                    }
+                    $itemsWritten++;
+                }
+            }
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return $this->fail($e);
+        }
+
+        return [
+            'ok' => true,
+            'rows' => $rows,
+            'updated' => $ordersUpdated,
+            'created' => $ordersCreated,
+            'skipped' => $ordersSkipped,
+            'message' => "Vendas por item: {$ordersCreated} pedidos criados, {$ordersUpdated} atualizados, {$ordersSkipped} ignorados "
+                . "(" . count($porPedido) . " pedidos únicos, {$itemsWritten} itens gravados, {$skusNotFound} SKUs não encontrados no catálogo, de {$rows} linhas).",
+        ];
+    }
+
+    /**
+     * Converte a situação do Magazord para o status canônico do sistema.
+     *
+     * Incidente: o valor "Transporte" (pacote já despachado, com a transportadora)
+     * não batia em nenhum `str_contains` — só "transito"/"trânsito"/"envi"/"postad"
+     * eram reconhecidos como shipped. Caía no fallback "pending", que fica FORA de
+     * Order::CONFIRMED_STATUSES. Confirmado contra um export real (Consulta
+     * Dinâmica "Produto por Pedido"): "Transporte" era 27% de todas as linhas do
+     * arquivo — a maior fatia de qualquer status — então esse gap silenciava uma
+     * parte grande das vendas confirmadas em toda tela que depende de
+     * CONFIRMED_STATUSES (mesma classe de bug do PR #19).
+     */
     private function mapStatus(?string $transporte, ?string $situacao): string
     {
         $s = mb_strtolower(trim(($transporte ?? '') . ' ' . ($situacao ?? '')));
         return match (true) {
             str_contains($s, 'cancel') => 'cancelled',
             str_contains($s, 'entreg') => 'delivered',
-            str_contains($s, 'envi') || str_contains($s, 'transito') || str_contains($s, 'trânsito') || str_contains($s, 'postad') => 'shipped',
+            str_contains($s, 'envi') || str_contains($s, 'transito') || str_contains($s, 'trânsito') || str_contains($s, 'transporte') || str_contains($s, 'postad') => 'shipped',
             str_contains($s, 'nota fiscal') || str_contains($s, 'faturad') || str_contains($s, 'aprovad') || str_contains($s, 'pago') => 'approved',
             default => 'pending',
         };

@@ -8,6 +8,7 @@ use Inertia\Inertia;
 use App\Models\Order;
 use App\Services\Financial\FinancialProrationService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Carbon;
 
 class FinancialDashboardController extends Controller
 {
@@ -45,16 +46,21 @@ class FinancialDashboardController extends Controller
 
         // Histórico de Faturamento (Últimos 6 meses). history[5] é o mês atual,
         // history[4] o mês anterior — usados abaixo para crescimento e margem reais.
+        //
+        // Incidente: usava strtotime("-$i month"), que estoura em qualquer dia do
+        // mês que não existe no mês de destino (ex.: rodando dia 31, "-1 month"
+        // vira "31 de junho" -> PHP rola pra 1º de julho, ou seja, o "mês anterior"
+        // virava o MESMO mês atual). subMonthsNoOverflow() trava no último dia
+        // válido do mês de destino em vez de rolar pro mês seguinte.
         $history = [];
         for ($i = 5; $i >= 0; $i--) {
-            $m = date('m', strtotime("-$i month"));
-            $y = date('Y', strtotime("-$i month"));
-            $hStats = $this->financialService->calculateNetProfit($companyId, (int)$y, (int)$m);
+            $date = Carbon::now()->subMonthsNoOverflow($i);
+            $hStats = $this->financialService->calculateNetProfit($companyId, (int) $date->format('Y'), (int) $date->format('m'));
             $revenue = $hStats['gross_revenue'] ?? 0;
             $profit = $hStats['net_profit'] ?? 0;
             $contribMargin = $hStats['contribution_margin'] ?? 0;
             $history[] = [
-                'month' => date('M', strtotime("-$i month")),
+                'month' => $date->format('M'),
                 'revenue' => $revenue,
                 'profit' => $profit,
                 // Mesma base do card "Margem Contr." (contribution_margin / receita), não margem líquida.
