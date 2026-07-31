@@ -19,6 +19,14 @@ class NotaFiscalIndexService
 {
     public function indexAll(int $companyId, bool $force = false, ?callable $onProgress = null): array
     {
+        // PDFs reais (com fonte embutida, imagem, QR code) fazem o smalot/pdfparser
+        // reter um grafo de objetos bem maior que o texto extraído sugere, e parte
+        // dele só é liberado quando o coletor de ciclos do PHP roda (não é imediato
+        // por refcount puro). Num lote de milhares de arquivos isso já estourou o
+        // memory_limit padrão do cPanel em produção — mesmo espírito do
+        // @set_time_limit(0) já usado na importação Magazord, mas para memória.
+        @ini_set('memory_limit', '-1');
+
         // O adapter local do Flysystem tenta CRIAR a raiz configurada assim que
         // é instanciado (ao resolver o disco) — se não conseguir (permissão,
         // caminho errado), derruba com uma exceção feia em vez de um erro
@@ -82,6 +90,14 @@ class NotaFiscalIndexService
                 $nota->update(['status' => 'failed', 'error' => $e->getMessage()]);
                 $failed++;
             }
+
+            // Força a coleta de ciclos periodicamente — o grafo de objetos do
+            // pdfparser (Document/Page/Font se referenciando) só é liberado por
+            // isso, não por refcount simples, e sem isso a memória cresce sem
+            // limite ao longo de um lote grande.
+            if ($done % 25 === 0) {
+                gc_collect_cycles();
+            }
         }
 
         // Notas cujo arquivo sumiu do disco (não apaga o registro/histórico, só sinaliza).
@@ -122,5 +138,7 @@ class NotaFiscalIndexService
             'error' => $looksLikeScan ? 'Não indexado — parece ser um documento escaneado (sem texto extraível). OCR ainda não suportado.' : null,
             'indexed_at' => now(),
         ]);
+
+        unset($pdf, $pages, $parser);
     }
 }
