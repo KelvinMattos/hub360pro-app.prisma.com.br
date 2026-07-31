@@ -180,6 +180,60 @@ class CampaignControllerTest extends TestCase
         $this->assertDatabaseMissing('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $mensShirt]);
     }
 
+    public function test_create_from_date_excludes_infantil_products_from_dia_dos_pais(): void
+    {
+        $adultShoe = $this->makeProduct();
+        $kidsShoe = $this->makeProduct();
+        $this->makeReplenishmentRow($adultShoe, ['title' => 'Tenis Masculino Corrida', 'abc_class' => 'A', 'revenue_30d' => 5000]);
+        $this->makeReplenishmentRow($kidsShoe, ['title' => 'Tenis Infantil Menino', 'abc_class' => 'A', 'revenue_30d' => 8000]);
+        $dateId = $this->makeCommercialDate(['title' => 'Dia dos Pais', 'audience' => 'masculino']);
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertRedirect();
+        $campaign = DB::table('marketing_campaigns')->where('source_opportunity', 'calendario')->first();
+        $this->assertDatabaseHas('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $adultShoe]);
+        $this->assertDatabaseMissing('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $kidsShoe]);
+    }
+
+    public function test_create_from_date_requires_infantil_marker_for_dia_das_criancas(): void
+    {
+        $kidsToy = $this->makeProduct();
+        $adultMens = $this->makeProduct();
+        $adultWomens = $this->makeProduct();
+        $this->makeReplenishmentRow($kidsToy, ['title' => 'Bicicleta Infantil Aro 16', 'abc_class' => 'A', 'revenue_30d' => 5000]);
+        $this->makeReplenishmentRow($adultMens, ['title' => 'Tenis Masculino Corrida', 'abc_class' => 'A', 'revenue_30d' => 9000]);
+        $this->makeReplenishmentRow($adultWomens, ['title' => 'Tenis Feminino Corrida', 'abc_class' => 'A', 'revenue_30d' => 9000]);
+        $dateId = $this->makeCommercialDate(['title' => 'Dia das Crianças', 'audience' => 'infantil']);
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertRedirect();
+        $campaign = DB::table('marketing_campaigns')->where('source_opportunity', 'calendario')->first();
+        $this->assertDatabaseHas('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $kidsToy]);
+        $this->assertDatabaseMissing('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $adultMens]);
+        $this->assertDatabaseMissing('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $adultWomens]);
+    }
+
+    public function test_create_from_date_infantil_matches_accented_and_synonym_keywords(): void
+    {
+        $crianca = $this->makeProduct();
+        $juvenil = $this->makeProduct();
+        $kids = $this->makeProduct();
+        $this->makeReplenishmentRow($crianca, ['title' => 'Mochila para Criança', 'abc_class' => 'A', 'revenue_30d' => 3000]);
+        $this->makeReplenishmentRow($juvenil, ['title' => 'Bicicleta Juvenil Aro 20', 'status' => 'excesso', 'immobilized_value' => 2000]);
+        $this->makeReplenishmentRow($kids, ['title' => 'Tenis Kids Corrida', 'abc_class' => 'A', 'revenue_30d' => 1000]);
+        $dateId = $this->makeCommercialDate(['title' => 'Dia das Crianças', 'audience' => 'infantil']);
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertRedirect();
+        $campaign = DB::table('marketing_campaigns')->where('source_opportunity', 'calendario')->first();
+        $this->assertDatabaseHas('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $crianca]);
+        $this->assertDatabaseHas('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $juvenil]);
+        $this->assertDatabaseHas('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $kids]);
+    }
+
     public function test_create_from_date_does_not_filter_neutral_titles_by_audience(): void
     {
         $neutralItem = $this->makeProduct();
@@ -335,6 +389,25 @@ class CampaignControllerTest extends TestCase
 
         $this->assertDatabaseMissing('marketing_campaigns', ['id' => $campaignId]);
         $this->assertDatabaseHas('marketing_tasks', ['id' => $taskId, 'campaign_id' => null]);
+    }
+
+    /**
+     * Incidente: excluir uma campanha a partir da sua própria tela de Show
+     * caía em 404 — destroy() usava back(), que reaponta pra URL de origem
+     * (o Show da campanha recém-apagada). Precisa redirecionar pro Kanban.
+     */
+    public function test_destroy_redirects_to_index_not_back_to_deleted_campaign(): void
+    {
+        $campaignId = DB::table('marketing_campaigns')->insertGetId([
+            'company_id' => $this->companyId, 'name' => 'Campanha', 'stage' => 'ideia',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->from(route('marketing.campaigns.show', $campaignId))
+            ->delete(route('marketing.campaigns.destroy', $campaignId));
+
+        $response->assertRedirect(route('marketing.campaigns.index'));
     }
 
     public function test_show_returns_404_for_campaign_from_another_company(): void
