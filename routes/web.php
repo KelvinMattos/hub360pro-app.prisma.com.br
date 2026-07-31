@@ -24,6 +24,10 @@ use App\Http\Controllers\Financial\HealthDashboardController;
 use App\Http\Controllers\Financial\FinancialDashboardController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SuperAdminController;
+use App\Http\Controllers\Marketing\MarketingDashboardController;
+use App\Http\Controllers\Marketing\CampaignController;
+use App\Http\Controllers\Marketing\TaskController as MarketingTaskController;
+use App\Http\Controllers\Marketing\CommercialDateController;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\UserController;
 
@@ -84,6 +88,33 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/fixed-expenses', [\App\Http\Controllers\Financial\FixedExpenseController::class, 'index'])->name('fixed-expenses.index');
         Route::post('/fixed-expenses', [\App\Http\Controllers\Financial\FixedExpenseController::class, 'store'])->name('fixed-expenses.store');
         Route::delete('/fixed-expenses/{id}', [\App\Http\Controllers\Financial\FixedExpenseController::class, 'destroy'])->name('fixed-expenses.destroy');
+    });
+
+    // Módulo de Marketing — oportunidades (lançamento/mais vendido/liquidar),
+    // campanhas em Kanban, tarefas do time e calendário de datas comerciais.
+    Route::prefix('marketing')->name('marketing.')->group(function () {
+        Route::get('/', [MarketingDashboardController::class, 'index'])->name('dashboard');
+
+        Route::get('/campaigns', [CampaignController::class, 'index'])->name('campaigns.index');
+        Route::post('/campaigns', [CampaignController::class, 'store'])->name('campaigns.store');
+        Route::post('/campaigns/from-opportunity', [CampaignController::class, 'createFromOpportunity'])->name('campaigns.from-opportunity');
+        Route::get('/campaigns/products/search', [CampaignController::class, 'searchProducts'])->name('campaigns.products.search');
+        Route::get('/campaigns/{campaign}', [CampaignController::class, 'show'])->name('campaigns.show');
+        Route::put('/campaigns/{campaign}', [CampaignController::class, 'update'])->name('campaigns.update');
+        Route::patch('/campaigns/{campaign}/stage', [CampaignController::class, 'updateStage'])->name('campaigns.stage');
+        Route::delete('/campaigns/{campaign}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
+        Route::post('/campaigns/{campaign}/products', [CampaignController::class, 'attachProduct'])->name('campaigns.products.attach');
+        Route::delete('/campaigns/{campaign}/products/{product}', [CampaignController::class, 'detachProduct'])->name('campaigns.products.detach');
+
+        Route::get('/tasks', [MarketingTaskController::class, 'index'])->name('tasks.index');
+        Route::post('/tasks', [MarketingTaskController::class, 'store'])->name('tasks.store');
+        Route::patch('/tasks/{task}', [MarketingTaskController::class, 'update'])->name('tasks.update');
+        Route::delete('/tasks/{task}', [MarketingTaskController::class, 'destroy'])->name('tasks.destroy');
+
+        Route::get('/calendar', [CommercialDateController::class, 'index'])->name('calendar.index');
+        Route::post('/calendar', [CommercialDateController::class, 'store'])->name('calendar.store');
+        Route::delete('/calendar/{date}', [CommercialDateController::class, 'destroy'])->name('calendar.destroy');
+        Route::post('/calendar/import', [CommercialDateController::class, 'import'])->name('calendar.import');
     });
 
         // Módulo 1: Motor de Precificação & Simulador 360 PRO
