@@ -64,7 +64,12 @@
                     <p>Calculando…</p>
                 </div>
 
-                <div v-else class="overflow-x-auto">
+                <div v-else>
+                    <div v-if="!preco || preco <= 0" class="bg-amber-50 border border-amber-200 text-amber-700 text-xs px-4 py-2.5 rounded-xl mb-4">
+                        <i class="fa-solid fa-circle-info mr-1.5"></i>
+                        <b>PV Promo, Margem, % Margem e Status</b> ficam vazios até você informar o <b>Preço praticado</b> ali em cima — sem ele não tem como saber se aquele preço dá lucro ou prejuízo em cada canal.
+                    </div>
+                <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
@@ -93,6 +98,7 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
                 </div>
                 <p class="text-xs text-slate-400 mt-4">
                     A comissão de cada canal vem da configuração padrão (editável aqui para simular). Quer travar esses valores por empresa? Dá para persistir depois.
