@@ -80,6 +80,9 @@
                                         <Link :href="route('meli.war_room', { search: product.master_sku })" class="w-8 h-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-lg" title="Modo Espião">
                                             <i class="fa-solid fa-radar text-[10px]"></i>
                                         </Link>
+                                        <Link :href="route('notas-fiscais.index', { termo: product.master_sku })" class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center hover:bg-blue-500 hover:text-white transition-all shadow-lg" title="Ver Notas Fiscais deste Produto">
+                                            <i class="fa-solid fa-file-invoice text-[10px]"></i>
+                                        </Link>
                                     </div>
                                 </td>
                             </tr>

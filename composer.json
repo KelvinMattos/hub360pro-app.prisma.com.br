@@ -17,6 +17,7 @@
         "laravel/reverb": "^1.8",
         "laravel/tinker": "^2.9",
         "pusher/pusher-php-server": "^7.2",
+        "smalot/pdfparser": "^2.12",
         "symfony/clock": "^7.0",
         "symfony/css-selector": "^7.0",
         "symfony/event-dispatcher": "^7.0",

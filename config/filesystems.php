@@ -47,6 +47,13 @@ return [
             'report' => false,
         ],
 
+        'notas_fiscais' => [
+            'driver' => 'local',
+            'root' => env('NOTAS_FISCAIS_PATH', '/app.prismaads.com.br/storage/notas-fiscais'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
