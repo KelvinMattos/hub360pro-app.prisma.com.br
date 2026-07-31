@@ -35,6 +35,9 @@ class ChannelCalculatorController extends Controller
         ]);
     }
 
+    /** Terminações de arredondamento comercial oferecidas na tela -> valor aceito por PricingEngine::roundToCharm(). */
+    private const ROUND_ENDINGS = ['00' => 0.00, '50' => 0.50, '90' => 0.90, '99' => 0.99];
+
     /** Calcula equilíbrio/meta/promo/margem por canal a partir do PricingEngine. */
     public function compute(Request $request)
     {
@@ -44,6 +47,8 @@ class ChannelCalculatorController extends Controller
             'imposto' => ['required', 'numeric'],
             'mc' => ['required', 'numeric'],
             'markup' => ['required', 'numeric'],
+            'roundEnabled' => ['nullable', 'boolean'],
+            'roundEnding' => ['nullable', 'in:00,50,90,99'],
             'channels' => ['required', 'array'],
             'channels.*.id' => ['required', 'string'],
             'channels.*.label' => ['nullable', 'string'],
@@ -58,17 +63,25 @@ class ChannelCalculatorController extends Controller
         $imposto = (float) $data['imposto'];
         $mc = (float) $data['mc'];
         $markup = (float) $data['markup'];
+        $roundEnabled = (bool) ($data['roundEnabled'] ?? false);
+        $roundEnding = self::ROUND_ENDINGS[$data['roundEnding'] ?? '90'] ?? 0.90;
 
-        $rows = array_map(function (array $ch) use ($custo, $preco, $imposto, $mc, $markup) {
+        $rows = array_map(function (array $ch) use ($custo, $preco, $imposto, $mc, $markup, $roundEnabled, $roundEnding) {
             $comissao = (float) $ch['comissao'];
             $temFaixa = $ch['temFaixa'] ?? 'none';
             $encargos = $imposto + $mc + $comissao;
 
+            // Sempre o valor EXATO — status e margem nunca usam o preço arredondado,
+            // senão "Abaixo eq." e "Prejuízo" mudariam de resposta só por causa da
+            // terminação escolhida na tela.
             $equilibrio = $custo > 0 ? $this->pricingEngine->tieredBreakEven($custo, $encargos, $temFaixa) : null;
             $meta = $equilibrio !== null ? round($equilibrio * (1 + $markup / 100), 2) : null;
+            // PV Promo já tem arredondamento embutido na própria fórmula validada contra
+            // a planilha (CLAUDE.md §9) — a terminação escolhida só substitui o 0,90 padrão.
             $promo = ($preco && $equilibrio !== null)
                 ? round($this->pricingEngine->suggestedPromoPrice(
-                    $preco, $equilibrio, (float) ($ch['descAtual'] ?? 20), (float) ($ch['descEquil'] ?? 10)
+                    $preco, $equilibrio, (float) ($ch['descAtual'] ?? 20), (float) ($ch['descEquil'] ?? 10),
+                    $roundEnabled ? $roundEnding : 0.90
                 ), 2)
                 : null;
             $margem = $preco ? round($this->pricingEngine->unitContribution($preco, $custo, $encargos), 2) : null;
@@ -89,6 +102,14 @@ class ChannelCalculatorController extends Controller
                 }
             }
 
+            // Arredondamento comercial é só para EXIBIÇÃO de Equilíbrio/Meta.
+            $equilibrioDisplay = ($roundEnabled && $equilibrio !== null)
+                ? $this->pricingEngine->roundToCharm($equilibrio, $roundEnding)
+                : $equilibrio;
+            $metaDisplay = ($roundEnabled && $meta !== null)
+                ? $this->pricingEngine->roundToCharm($meta, $roundEnding)
+                : $meta;
+
             return [
                 'id' => $ch['id'],
                 'label' => $ch['label'] ?? $ch['id'],
@@ -96,8 +117,8 @@ class ChannelCalculatorController extends Controller
                 'temFaixa' => $temFaixa,
                 'descAtual' => $ch['descAtual'] ?? 20,
                 'descEquil' => $ch['descEquil'] ?? 10,
-                'equilibrio' => $equilibrio !== null ? round($equilibrio, 2) : null,
-                'meta' => $meta,
+                'equilibrio' => $equilibrioDisplay !== null ? round($equilibrioDisplay, 2) : null,
+                'meta' => $metaDisplay,
                 'promo' => $promo,
                 'margem' => $margem,
                 'margemPct' => $margemPct,

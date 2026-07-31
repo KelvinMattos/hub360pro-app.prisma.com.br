@@ -83,4 +83,97 @@ class ChannelCalculatorEndpointTest extends TestCase
         $this->assertNull($row['margem']);
         $this->assertNotNull($row['equilibrio']);
     }
+
+    public function test_round_disabled_keeps_exact_equilibrio_and_meta(): void
+    {
+        $user = $this->authenticatedUser();
+        $engine = app(PricingEngine::class);
+        $encargos = 8.0 + 11.0 + 2.0;
+
+        $response = $this->actingAs($user)->postJson(route('calculator.compute'), [
+            'custo' => 100.0, 'preco' => null, 'imposto' => 8, 'mc' => 11, 'markup' => 23.433,
+            'roundEnabled' => false,
+            'channels' => [['id' => 'site', 'comissao' => 2, 'temFaixa' => 'none']],
+        ]);
+
+        $row = $response->json('rows.0');
+        $rawEquilibrio = $engine->tieredBreakEven(100.0, $encargos, 'none');
+        $this->assertSame($rawEquilibrio, $row['equilibrio']);
+    }
+
+    public function test_round_enabled_rounds_equilibrio_and_meta_to_selected_ending(): void
+    {
+        $user = $this->authenticatedUser();
+        $engine = app(PricingEngine::class);
+        $encargos = 8.0 + 11.0 + 2.0;
+
+        $response = $this->actingAs($user)->postJson(route('calculator.compute'), [
+            'custo' => 100.0, 'preco' => null, 'imposto' => 8, 'mc' => 11, 'markup' => 23.433,
+            'roundEnabled' => true, 'roundEnding' => '50',
+            'channels' => [['id' => 'site', 'comissao' => 2, 'temFaixa' => 'none']],
+        ]);
+
+        $row = $response->json('rows.0');
+        $rawEquilibrio = $engine->tieredBreakEven(100.0, $encargos, 'none');
+        $rawMeta = round($rawEquilibrio * (1 + 23.433 / 100), 2);
+
+        $this->assertSame($engine->roundToCharm($rawEquilibrio, 0.50), $row['equilibrio']);
+        $this->assertSame($engine->roundToCharm($rawMeta, 0.50), $row['meta']);
+        // Prova que o arredondamento realmente mudou o valor exibido (não é coincidência).
+        $this->assertNotSame($rawEquilibrio, $row['equilibrio']);
+    }
+
+    /**
+     * A terminação escolhida na tela nunca pode mudar se um preço é classificado
+     * como "Lucro"/"Prejuízo"/"Abaixo eq." — status e margem sempre usam o valor
+     * exato, só a exibição de Equilíbrio/Meta/Promo muda com o arredondamento.
+     */
+    public function test_round_enabled_does_not_change_status_or_margin(): void
+    {
+        $user = $this->authenticatedUser();
+        $engine = app(PricingEngine::class);
+        $encargos = 8.0 + 11.0 + 2.0;
+        $equilibrio = $engine->tieredBreakEven(100.0, $encargos, 'none');
+
+        $payloadBase = [
+            'custo' => 100.0, 'preco' => $equilibrio, 'imposto' => 8, 'mc' => 11, 'markup' => 23.433,
+            'channels' => [['id' => 'site', 'comissao' => 2, 'temFaixa' => 'none']],
+        ];
+
+        $rounded = $this->actingAs($user)->postJson(route('calculator.compute'),
+            $payloadBase + ['roundEnabled' => true, 'roundEnding' => '99']);
+        $raw = $this->actingAs($user)->postJson(route('calculator.compute'),
+            $payloadBase + ['roundEnabled' => false]);
+
+        $this->assertSame($raw->json('rows.0.status'), $rounded->json('rows.0.status'));
+        $this->assertSame($raw->json('rows.0.margem'), $rounded->json('rows.0.margem'));
+    }
+
+    public function test_promo_price_uses_selected_rounding_ending(): void
+    {
+        $user = $this->authenticatedUser();
+        $engine = app(PricingEngine::class);
+        $encargos = 8.0 + 11.0 + 2.0;
+        $equilibrio = $engine->tieredBreakEven(100.0, $encargos, 'none');
+
+        $response = $this->actingAs($user)->postJson(route('calculator.compute'), [
+            'custo' => 100.0, 'preco' => 250.0, 'imposto' => 8, 'mc' => 11, 'markup' => 23.433,
+            'roundEnabled' => true, 'roundEnding' => '00',
+            'channels' => [['id' => 'site', 'comissao' => 2, 'temFaixa' => 'none', 'descAtual' => 20, 'descEquil' => 10]],
+        ]);
+
+        $expectedPromo = round($engine->suggestedPromoPrice(250.0, $equilibrio, 20, 10, 0.00), 2);
+        $this->assertSame($expectedPromo, (float) $response->json('rows.0.promo'));
+    }
+
+    public function test_round_ending_rejects_unlisted_value(): void
+    {
+        $user = $this->authenticatedUser();
+        $response = $this->actingAs($user)->postJson(route('calculator.compute'), [
+            'custo' => 100.0, 'imposto' => 8, 'mc' => 11, 'markup' => 20,
+            'roundEnabled' => true, 'roundEnding' => '77',
+            'channels' => [['id' => 'site', 'comissao' => 2]],
+        ]);
+        $response->assertStatus(422);
+    }
 }

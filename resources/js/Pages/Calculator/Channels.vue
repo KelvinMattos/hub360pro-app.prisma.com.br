@@ -40,6 +40,19 @@
                         <input v-model.number="markup" type="number" step="0.001" class="inp">
                     </div>
                 </div>
+                <div class="flex flex-wrap items-center gap-3 mt-5 pt-5 border-t border-slate-100">
+                    <label class="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" v-model="roundEnabled" class="w-4 h-4 accent-cyan-500">
+                        <span class="text-xs font-bold text-slate-600 uppercase tracking-wide">Arredondar preços</span>
+                    </label>
+                    <select v-model="roundEnding" :disabled="!roundEnabled" class="inp !w-auto text-sm py-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <option value="00">Terminação ,00</option>
+                        <option value="50">Terminação ,50</option>
+                        <option value="90">Terminação ,90</option>
+                        <option value="99">Terminação ,99</option>
+                    </select>
+                    <span class="text-xs text-slate-400">Afeta só a exibição de Ponto Equilíbrio, PV Meta e PV Promo — Margem e Status sempre usam o valor exato.</span>
+                </div>
                 <p class="text-xs text-slate-400 mt-4">
                     <i class="fa-solid fa-circle-info mr-1"></i>
                     Ponto de equilíbrio = custo ÷ (1 − (imposto + MC + comissão do canal)). PV Meta aplica o markup sobre o equilíbrio.
@@ -126,6 +139,8 @@ const preco = ref(null);
 const imposto = ref(props.defaults.imposto);
 const mc = ref(props.defaults.mc);
 const markup = ref(props.defaults.channels[0]?.markup ?? 23.433);
+const roundEnabled = ref(false);
+const roundEnding = ref('90');
 
 const channels = reactive(props.defaults.channels.map(c => ({
     id: c.id, label: c.label, comissao: c.comissao, temFaixa: c.temFaixa,
@@ -157,6 +172,8 @@ async function runCompute() {
             imposto: imposto.value,
             mc: mc.value,
             markup: markup.value,
+            roundEnabled: roundEnabled.value,
+            roundEnding: roundEnding.value,
             channels: channels.map(c => ({ ...c })),
         }, {
             headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '' },
@@ -189,7 +206,7 @@ async function runCompute() {
     }
 }
 
-watch([custo, preco, imposto, mc, markup, () => channels.map(c => c.comissao)], scheduleCompute, { deep: true });
+watch([custo, preco, imposto, mc, markup, roundEnabled, roundEnding, () => channels.map(c => c.comissao)], scheduleCompute, { deep: true });
 onBeforeUnmount(() => clearTimeout(debounceTimer));
 
 function marginClass(v) {
