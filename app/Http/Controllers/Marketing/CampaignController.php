@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 /**
@@ -222,25 +223,51 @@ class CampaignController extends Controller
     }
 
     /**
-     * Incidente: o kit sugerido pro Dia dos Pais recomendou produto "Feminino"
+     * Incidente 1: o kit sugerido pro Dia dos Pais recomendou produto "Feminino"
      * — o motor de oportunidades não tem noção de público, só de venda/estoque.
-     * Exclusão simples por palavra no título (não é uma classificação real de
-     * gênero do produto, só descarta o caso óbvio: gênero oposto explícito no
-     * título).
+     * Incidente 2: o kit do Dia das Crianças trazia produtos masculino/feminino
+     * de adulto — não basta excluir o gênero oposto, público infantil precisa
+     * de regra própria.
+     *
+     * Duas estratégias, por não serem o mesmo tipo de erro:
+     *  - masculino/feminino (Pais/Mães): modo EXCLUSÃO — descarta o que bate
+     *    com gênero oposto adulto OU com público infantil (criança não é
+     *    presente típico de Dia dos Pais/Mães). Não exige a palavra do gênero
+     *    certo no título (a maioria dos produtos não fala "masculino"
+     *    explicitamente, e exigir isso esvaziaria a lista à toa).
+     *  - infantil (Crianças): modo INCLUSÃO — exige algum marcador
+     *    infantil/juvenil no título. Sem isso, item adulto genérico (curva A
+     *    ou parado) não tem por que entrar no kit dessa data.
+     *
+     * Não é classificação real de produto — é correspondência de palavra no
+     * título, o mesmo dado que já expôs o erro original.
      */
+    private const AUDIENCE_RULES = [
+        'masculino' => ['mode' => 'exclude', 'patterns' => ['feminin', 'menin[ao]', '\bwoman\b', '\bwomens?\b', '\bgirls?\b', 'infantil', 'juvenil', 'crianc', '\bkids?\b', 'bebe']],
+        'feminino' => ['mode' => 'exclude', 'patterns' => ['masculin', 'menin[ao]', '\bman\b', '\bmens?\b', '\bboys?\b', 'infantil', 'juvenil', 'crianc', '\bkids?\b', 'bebe']],
+        'infantil' => ['mode' => 'require', 'patterns' => ['infantil', 'juvenil', 'crianc', '\bkids?\b', 'menin[ao]', 'bebe']],
+    ];
+
     private function excludedByAudience(string $title, ?string $audience): bool
     {
-        if (!$audience) {
+        $rule = self::AUDIENCE_RULES[$audience] ?? null;
+        if (!$rule) {
             return false;
         }
 
-        $title = mb_strtolower($title);
+        // ascii() tira acento (criança -> crianca, bebê -> bebe) pra não
+        // depender de o import ter vindo com encoding/acentuação consistente.
+        $normalized = Str::of($title)->lower()->ascii()->toString();
 
-        return match ($audience) {
-            'masculino' => (bool) preg_match('/feminin[oa]/u', $title),
-            'feminino' => (bool) preg_match('/masculin[oa]/u', $title),
-            default => false,
-        };
+        $matchesAny = false;
+        foreach ($rule['patterns'] as $pattern) {
+            if (preg_match('/' . $pattern . '/u', $normalized)) {
+                $matchesAny = true;
+                break;
+            }
+        }
+
+        return $rule['mode'] === 'exclude' ? $matchesAny : !$matchesAny;
     }
 
     public function show(int $campaign)
@@ -318,7 +345,9 @@ class CampaignController extends Controller
         DB::table('marketing_tasks')->where('campaign_id', $campaign)->update(['campaign_id' => null]);
         DB::table('marketing_campaigns')->where('id', $campaign)->delete();
 
-        return back()->with('success', 'Campanha removida.');
+        // Nunca back() aqui: a página de origem é o Show desta própria campanha,
+        // que deixou de existir — back() levaria a um 404 na campanha recém-apagada.
+        return redirect()->route('marketing.campaigns.index')->with('success', 'Campanha removida.');
     }
 
     public function attachProduct(Request $request, int $campaign)
