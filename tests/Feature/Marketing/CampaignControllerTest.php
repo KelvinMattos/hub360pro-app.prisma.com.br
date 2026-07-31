@@ -148,6 +148,64 @@ class CampaignControllerTest extends TestCase
         ]);
     }
 
+    public function test_create_from_date_excludes_opposite_gender_products_for_dia_dos_pais(): void
+    {
+        $mensShoe = $this->makeProduct();
+        $womensShoe = $this->makeProduct();
+        $this->makeReplenishmentRow($mensShoe, ['title' => 'Tenis Masculino Corrida', 'abc_class' => 'A', 'revenue_30d' => 5000]);
+        $this->makeReplenishmentRow($womensShoe, ['title' => 'Tenis Feminino Corrida', 'abc_class' => 'A', 'revenue_30d' => 9000]);
+        $dateId = $this->makeCommercialDate(['title' => 'Dia dos Pais', 'audience' => 'masculino']);
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertRedirect();
+        $campaign = DB::table('marketing_campaigns')->where('source_opportunity', 'calendario')->first();
+        $this->assertDatabaseHas('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $mensShoe]);
+        $this->assertDatabaseMissing('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $womensShoe]);
+    }
+
+    public function test_create_from_date_excludes_opposite_gender_products_for_dia_das_maes(): void
+    {
+        $mensShirt = $this->makeProduct();
+        $womensShirt = $this->makeProduct();
+        $this->makeReplenishmentRow($mensShirt, ['title' => 'Camiseta Masculina Basica', 'abc_class' => 'A', 'revenue_30d' => 4000]);
+        $this->makeReplenishmentRow($womensShirt, ['title' => 'Camiseta Feminina Basica', 'abc_class' => 'A', 'revenue_30d' => 7000]);
+        $dateId = $this->makeCommercialDate(['title' => 'Dia das Mães', 'audience' => 'feminino']);
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertRedirect();
+        $campaign = DB::table('marketing_campaigns')->where('source_opportunity', 'calendario')->first();
+        $this->assertDatabaseHas('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $womensShirt]);
+        $this->assertDatabaseMissing('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $mensShirt]);
+    }
+
+    public function test_create_from_date_does_not_filter_neutral_titles_by_audience(): void
+    {
+        $neutralItem = $this->makeProduct();
+        $this->makeReplenishmentRow($neutralItem, ['title' => 'Bola De Beach Tennis 03 Unidades', 'abc_class' => 'A', 'revenue_30d' => 3000]);
+        $dateId = $this->makeCommercialDate(['title' => 'Dia dos Pais', 'audience' => 'masculino']);
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertRedirect();
+        $campaign = DB::table('marketing_campaigns')->where('source_opportunity', 'calendario')->first();
+        $this->assertDatabaseHas('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $neutralItem]);
+    }
+
+    public function test_create_from_date_no_audience_filter_for_neutral_date(): void
+    {
+        $womensShoe = $this->makeProduct();
+        $this->makeReplenishmentRow($womensShoe, ['title' => 'Tenis Feminino Corrida', 'abc_class' => 'A', 'revenue_30d' => 5000]);
+        $dateId = $this->makeCommercialDate(['title' => 'Black Friday', 'audience' => null]);
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertRedirect();
+        $campaign = DB::table('marketing_campaigns')->where('source_opportunity', 'calendario')->first();
+        $this->assertDatabaseHas('marketing_campaign_products', ['campaign_id' => $campaign->id, 'product_id' => $womensShoe]);
+    }
+
     public function test_create_from_date_dedupes_product_in_both_lists(): void
     {
         // Curva A que também está com excesso de estoque: aparece nas duas listas do motor.
