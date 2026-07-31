@@ -54,5 +54,6 @@ function createCampaign() {
 
 const toneClasses = computed(() => ({
     blue: 'text-blue-600 bg-blue-50', emerald: 'text-emerald-600 bg-emerald-50', red: 'text-red-600 bg-red-50',
+    amber: 'text-amber-600 bg-amber-50',
 }[props.tone] || 'text-slate-600 bg-slate-50'));
 </script>

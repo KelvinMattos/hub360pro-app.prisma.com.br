@@ -66,6 +66,7 @@
 import { ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { patchViaPost, deleteViaPost } from '@/lib/spoofedRouter';
 
 const props = defineProps({
     tasks: { type: Array, default: () => [] },
@@ -84,10 +85,10 @@ function createTask() {
 }
 
 function updateStatus(task, status) {
-    router.patch(route('marketing.tasks.update', task.id), { status }, { preserveScroll: true, preserveState: true });
+    patchViaPost(route('marketing.tasks.update', task.id), { status }, { preserveScroll: true, preserveState: true });
 }
 function deleteTask(id) {
-    router.delete(route('marketing.tasks.destroy', id), { preserveScroll: true });
+    deleteViaPost(route('marketing.tasks.destroy', id), { preserveScroll: true });
 }
 
 function applyFilter(patch) {

@@ -52,7 +52,7 @@ class TaskController extends Controller
     {
         $companyId = Auth::user()?->company_id;
         if (!$companyId) {
-            return back()->withErrors(['company' => 'Empresa não identificada.']);
+            return back()->with('error', 'Empresa não identificada.');
         }
 
         $data = $request->validate([

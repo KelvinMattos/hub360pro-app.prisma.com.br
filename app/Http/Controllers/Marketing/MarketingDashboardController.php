@@ -99,7 +99,7 @@ class MarketingDashboardController extends Controller
     private function emptyPayload(): array
     {
         return [
-            'opportunities' => ['lancamento' => [], 'mais_vendido' => [], 'liquidar' => []],
+            'opportunities' => ['lancamento' => [], 'mais_vendido' => [], 'liquidar' => [], 'perdendo_buybox' => []],
             'upcomingDates' => [],
             'stageCounts' => [],
             'myTasks' => [],

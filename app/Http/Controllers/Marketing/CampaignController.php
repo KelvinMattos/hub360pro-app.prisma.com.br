@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Marketing;
 
 use App\Http\Controllers\Controller;
+use App\Services\Marketing\MarketingOpportunityService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -60,7 +62,7 @@ class CampaignController extends Controller
     {
         $companyId = Auth::user()?->company_id;
         if (!$companyId) {
-            return back()->withErrors(['company' => 'Empresa não identificada.']);
+            return back()->with('error', 'Empresa não identificada.');
         }
 
         $data = $request->validate([
@@ -94,18 +96,18 @@ class CampaignController extends Controller
     {
         $companyId = Auth::user()?->company_id;
         if (!$companyId) {
-            return back()->withErrors(['company' => 'Empresa não identificada.']);
+            return back()->with('error', 'Empresa não identificada.');
         }
 
         $data = $request->validate([
-            'opportunity' => ['required', 'string', 'in:lancamento,mais_vendido,liquidar'],
+            'opportunity' => ['required', 'string', 'in:lancamento,mais_vendido,liquidar,perdendo_buybox'],
             'name' => ['required', 'string', 'max:255'],
             'product_ids' => ['required', 'array', 'min:1'],
             'product_ids.*' => ['integer'],
         ]);
 
-        $typeMap = ['lancamento' => 'lancamento', 'mais_vendido' => 'outro', 'liquidar' => 'liquidacao'];
-        $actionMap = ['lancamento' => 'destacar', 'mais_vendido' => 'anunciar', 'liquidar' => 'liquidar'];
+        $typeMap = ['lancamento' => 'lancamento', 'mais_vendido' => 'outro', 'liquidar' => 'liquidacao', 'perdendo_buybox' => 'outro'];
+        $actionMap = ['lancamento' => 'destacar', 'mais_vendido' => 'anunciar', 'liquidar' => 'liquidar', 'perdendo_buybox' => 'recuperar'];
 
         $campaignId = DB::table('marketing_campaigns')->insertGetId([
             'company_id' => $companyId,
@@ -133,6 +135,80 @@ class CampaignController extends Controller
 
         return redirect()->route('marketing.campaigns.show', $campaignId)
             ->with('success', 'Campanha criada com ' . count($rows) . ' produto(s) já vinculado(s).');
+    }
+
+    /**
+     * Cria uma campanha "kit" pra uma data comercial: mais vendidos (empurrar
+     * tráfego na data) + produtos parados (liquidar antes dela), já vinculados.
+     * É a ponte entre o calendário e as oportunidades que o cliente pediu.
+     */
+    public function createFromDate(Request $request, MarketingOpportunityService $opportunities, int $date)
+    {
+        $companyId = Auth::user()?->company_id;
+        if (!$companyId) {
+            return back()->with('error', 'Empresa não identificada.');
+        }
+
+        $commercialDate = DB::table('commercial_dates')
+            ->where('id', $date)
+            ->where(function ($q) use ($companyId) {
+                $q->whereNull('company_id')->orWhere('company_id', $companyId);
+            })
+            ->first();
+        abort_unless($commercialDate, 404);
+
+        $bestSellers = collect($opportunities->bestSellers($companyId, 5))->pluck('product_id');
+        $liquidation = collect($opportunities->liquidationCandidates($companyId, 5))->pluck('product_id');
+
+        if ($bestSellers->isEmpty() && $liquidation->isEmpty()) {
+            return back()->with('error', 'Sem produtos elegíveis (mais vendidos ou parados) pra sugerir campanha nesta data ainda.');
+        }
+
+        $eventDate = Carbon::parse($commercialDate->date);
+        if ($commercialDate->recurring_yearly) {
+            $thisYear = $eventDate->copy()->year(Carbon::now()->year);
+            $eventDate = $thisYear->lt(Carbon::now()->startOfDay()) ? $thisYear->addYear() : $thisYear;
+        }
+
+        $campaignId = DB::table('marketing_campaigns')->insertGetId([
+            'company_id' => $companyId,
+            'name' => 'Campanha — ' . $commercialDate->title,
+            'type' => 'sazonal',
+            'stage' => 'ideia',
+            'source_opportunity' => 'calendario',
+            'start_date' => Carbon::now()->toDateString(),
+            'end_date' => $eventDate->toDateString(),
+            'created_by' => Auth::id(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Liquidação tem prioridade quando um produto aparece nas duas listas
+        // (raro, mas possível): liberar capital parado é mais urgente do que
+        // reforçar mídia num produto que já vende bem.
+        $rows = [];
+        $seen = [];
+        foreach ($liquidation as $productId) {
+            if (isset($seen[$productId])) {
+                continue;
+            }
+            $seen[$productId] = true;
+            $rows[] = ['campaign_id' => $campaignId, 'product_id' => $productId, 'suggested_action' => 'liquidar', 'created_at' => now(), 'updated_at' => now()];
+        }
+        foreach ($bestSellers as $productId) {
+            if (isset($seen[$productId])) {
+                continue;
+            }
+            $seen[$productId] = true;
+            $rows[] = ['campaign_id' => $campaignId, 'product_id' => $productId, 'suggested_action' => 'anunciar', 'created_at' => now(), 'updated_at' => now()];
+        }
+
+        if (!empty($rows)) {
+            DB::table('marketing_campaign_products')->insert($rows);
+        }
+
+        return redirect()->route('marketing.campaigns.show', $campaignId)
+            ->with('success', 'Campanha criada para ' . $commercialDate->title . ' com ' . count($rows) . ' produto(s) sugerido(s).');
     }
 
     public function show(int $campaign)
@@ -228,7 +304,7 @@ class CampaignController extends Controller
 
         $productBelongs = DB::table('products')->where('id', $data['product_id'])->where('company_id', $companyId)->exists();
         if (!$productBelongs) {
-            return back()->withErrors(['product_id' => 'Produto não encontrado.']);
+            return back()->with('error', 'Produto não encontrado.');
         }
 
         DB::table('marketing_campaign_products')->updateOrInsert(

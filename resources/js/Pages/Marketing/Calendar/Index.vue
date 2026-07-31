@@ -66,6 +66,7 @@
 import { ref } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { deleteViaPost } from '@/lib/spoofedRouter';
 
 const props = defineProps({
     dates: { type: Array, default: () => [] },
@@ -78,7 +79,7 @@ function createDate() {
 }
 function deleteDate(id) {
     if (!confirm('Remover esta data?')) return;
-    router.delete(route('marketing.calendar.destroy', id), { preserveScroll: true });
+    deleteViaPost(route('marketing.calendar.destroy', id), { preserveScroll: true });
 }
 
 const file = ref(null);

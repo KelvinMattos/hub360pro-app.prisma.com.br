@@ -109,6 +109,7 @@ import { ref, watch } from 'vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
 import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { patchViaPost, putViaPost, deleteViaPost } from '@/lib/spoofedRouter';
 
 const props = defineProps({
     campaign: { type: Object, required: true },
@@ -128,21 +129,21 @@ const editForm = ref({
 const stageModel = ref(props.campaign.stage);
 
 function saveCampaign() {
-    router.put(route('marketing.campaigns.update', props.campaign.id), {
+    putViaPost(route('marketing.campaigns.update', props.campaign.id), {
         name: props.campaign.name, ...editForm.value,
     }, { preserveScroll: true });
 }
 
 function deleteCampaign() {
     if (!confirm('Excluir esta campanha? Produtos vinculados serão desvinculados e tarefas ficarão soltas.')) return;
-    router.delete(route('marketing.campaigns.destroy', props.campaign.id));
+    deleteViaPost(route('marketing.campaigns.destroy', props.campaign.id));
 }
 
 let stageDebounce = null;
 watch(stageModel, (v) => {
     clearTimeout(stageDebounce);
     stageDebounce = setTimeout(() => {
-        router.patch(route('marketing.campaigns.stage', props.campaign.id), { stage: v }, { preserveScroll: true });
+        patchViaPost(route('marketing.campaigns.stage', props.campaign.id), { stage: v }, { preserveScroll: true });
     }, 150);
 });
 
@@ -164,7 +165,7 @@ function attachProduct(p) {
     });
 }
 function detachProduct(productId) {
-    router.delete(route('marketing.campaigns.products.detach', [props.campaign.id, productId]), { preserveScroll: true });
+    deleteViaPost(route('marketing.campaigns.products.detach', [props.campaign.id, productId]), { preserveScroll: true });
 }
 
 const taskForm = useForm({ title: '', assignee_id: null, due_date: '' });
@@ -175,10 +176,10 @@ function createTask() {
     });
 }
 function updateTaskStatus(task, status) {
-    router.patch(route('marketing.tasks.update', task.id), { status }, { preserveScroll: true, preserveState: true });
+    patchViaPost(route('marketing.tasks.update', task.id), { status }, { preserveScroll: true, preserveState: true });
 }
 function deleteTask(id) {
-    router.delete(route('marketing.tasks.destroy', id), { preserveScroll: true });
+    deleteViaPost(route('marketing.tasks.destroy', id), { preserveScroll: true });
 }
 
 const STAGE_LABELS = { ideia: 'Ideia', planejamento: 'Planejamento', execucao: 'Em execução', revisao: 'Revisão', concluido: 'Concluído' };

@@ -37,6 +37,12 @@
                         empty-text="Nenhum produto parado ou em excesso encontrado."
                         :items="opportunities.liquidar" opportunity="liquidar"
                         @create-campaign="createFromOpportunity" />
+
+                    <OpportunityColumn
+                        title="Perdendo Buy Box" icon="fa-solid fa-triangle-exclamation" tone="amber"
+                        empty-text="Nenhum produto perdendo Buy Box no momento (ou sem coleta ainda)."
+                        :items="opportunities.perdendo_buybox" opportunity="perdendo_buybox"
+                        @create-campaign="createFromOpportunity" />
                 </div>
 
                 <!-- Sidebar -->
@@ -57,14 +63,19 @@
                             <h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Próximas Datas</h3>
                         </div>
                         <div v-if="!upcomingDates.length" class="text-xs text-slate-400 py-4 text-center">Nenhuma data nos próximos 120 dias.</div>
-                        <div v-for="d in upcomingDates" :key="d.id" class="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
-                            <div>
-                                <p class="text-sm font-semibold text-slate-700">{{ d.title }}</p>
-                                <p class="text-[10px] text-slate-400 uppercase">{{ formatDate(d.date) }}</p>
+                        <div v-for="d in upcomingDates" :key="d.id" class="py-2 border-b border-slate-50 last:border-0">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-700">{{ d.title }}</p>
+                                    <p class="text-[10px] text-slate-400 uppercase">{{ formatDate(d.date) }}</p>
+                                </div>
+                                <span class="text-[10px] font-black px-2 py-1 rounded-full" :class="d.days_until <= 14 ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'">
+                                    {{ d.days_until === 0 ? 'hoje' : `${d.days_until}d` }}
+                                </span>
                             </div>
-                            <span class="text-[10px] font-black px-2 py-1 rounded-full" :class="d.days_until <= 14 ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'">
-                                {{ d.days_until === 0 ? 'hoje' : `${d.days_until}d` }}
-                            </span>
+                            <button @click="createFromDate(d)" class="mt-1 text-[10px] font-bold text-blue-600 hover:underline">
+                                <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Criar campanha pra esta data
+                            </button>
                         </div>
                         <Link :href="route('marketing.calendar.index')" class="block text-center mt-4 text-xs font-bold text-blue-600 hover:underline">Ver calendário completo</Link>
                     </div>
@@ -93,7 +104,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import OpportunityColumn from '@/Components/Marketing/OpportunityColumn.vue';
 
 const props = defineProps({
-    opportunities: { type: Object, default: () => ({ lancamento: [], mais_vendido: [], liquidar: [] }) },
+    opportunities: { type: Object, default: () => ({ lancamento: [], mais_vendido: [], liquidar: [], perdendo_buybox: [] }) },
     upcomingDates: { type: Array, default: () => [] },
     stageCounts: { type: Object, default: () => ({}) },
     myTasks: { type: Array, default: () => [] },
@@ -106,7 +117,7 @@ const stageList = [
     { key: 'concluido', label: 'Concluído' },
 ];
 
-const OPPORTUNITY_NAMES = { lancamento: 'Lançamentos', mais_vendido: 'Mais Vendidos', liquidar: 'Liquidação' };
+const OPPORTUNITY_NAMES = { lancamento: 'Lançamentos', mais_vendido: 'Mais Vendidos', liquidar: 'Liquidação', perdendo_buybox: 'Recuperar Buy Box' };
 
 function createFromOpportunity({ opportunity, productIds }) {
     if (!productIds.length) return;
@@ -115,6 +126,10 @@ function createFromOpportunity({ opportunity, productIds }) {
         name: `${OPPORTUNITY_NAMES[opportunity]} — ${new Date().toLocaleDateString('pt-BR')}`,
         product_ids: productIds,
     }, { preserveScroll: true });
+}
+
+function createFromDate(d) {
+    router.post(route('marketing.campaigns.from-date', d.id), {}, { preserveScroll: true });
 }
 
 function formatDate(v) {

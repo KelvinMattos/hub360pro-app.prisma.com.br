@@ -69,8 +69,9 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { Link, router, useForm } from '@inertiajs/vue3';
+import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { patchViaPost } from '@/lib/spoofedRouter';
 
 const props = defineProps({
     stages: { type: Array, default: () => [] },
@@ -100,7 +101,7 @@ function byStage(stage) {
 function onDragStart(id) { draggingId.value = id; }
 function onDrop(stage) {
     if (draggingId.value === null) return;
-    router.patch(route('marketing.campaigns.stage', draggingId.value), { stage }, { preserveScroll: true, preserveState: true });
+    patchViaPost(route('marketing.campaigns.stage', draggingId.value), { stage }, { preserveScroll: true, preserveState: true });
     draggingId.value = null;
 }
 
