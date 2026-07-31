@@ -90,6 +90,13 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/fixed-expenses/{id}', [\App\Http\Controllers\Financial\FixedExpenseController::class, 'destroy'])->name('fixed-expenses.destroy');
     });
 
+    // Compras > Notas Fiscais de Compra — busca em texto extraído dos PDFs
+    Route::prefix('compras/notas-fiscais')->name('notas-fiscais.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\NotaFiscalController::class, 'index'])->name('index');
+        Route::post('/reindex', [\App\Http\Controllers\NotaFiscalController::class, 'reindex'])->name('reindex');
+        Route::get('/{nota}/pdf', [\App\Http\Controllers\NotaFiscalController::class, 'view'])->name('view');
+    });
+
     // Módulo de Marketing — oportunidades (lançamento/mais vendido/liquidar),
     // campanhas em Kanban, tarefas do time e calendário de datas comerciais.
     Route::prefix('marketing')->name('marketing.')->group(function () {

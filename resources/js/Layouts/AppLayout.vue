@@ -193,6 +193,12 @@ const navigationConfig = [
         ]
     },
     {
+        title: 'Compras',
+        items: [
+            { label: 'Notas Fiscais de Compra', route: 'notas-fiscais.index', icon: 'fa-solid fa-file-invoice' },
+        ]
+    },
+    {
         title: 'Importações Magazord',
         items: [
             { label: 'Importar Estoque', route: 'magazord.show', params: { type: 'estoque' }, icon: 'fa-solid fa-boxes-stacked' },
