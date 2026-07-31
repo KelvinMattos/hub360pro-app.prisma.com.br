@@ -98,6 +98,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/campaigns', [CampaignController::class, 'index'])->name('campaigns.index');
         Route::post('/campaigns', [CampaignController::class, 'store'])->name('campaigns.store');
         Route::post('/campaigns/from-opportunity', [CampaignController::class, 'createFromOpportunity'])->name('campaigns.from-opportunity');
+        Route::post('/campaigns/from-date/{date}', [CampaignController::class, 'createFromDate'])->name('campaigns.from-date');
         Route::get('/campaigns/products/search', [CampaignController::class, 'searchProducts'])->name('campaigns.products.search');
         Route::get('/campaigns/{campaign}', [CampaignController::class, 'show'])->name('campaigns.show');
         Route::put('/campaigns/{campaign}', [CampaignController::class, 'update'])->name('campaigns.update');

@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Schema;
  * `whereIn` estourando placeholders no motor original — dois lugares
  * calculando a mesma coisa sempre divergem cedo ou tarde.
  *
- * Três categorias de oportunidade, cada uma mapeada para uma ação real de
+ * Quatro categorias de oportunidade, cada uma mapeada para uma ação real de
  * marketing:
  *
  *  - LANÇAMENTO: produto lançado recentemente (products.launched_at) —
@@ -25,22 +25,30 @@ use Illuminate\Support\Facades\Schema;
  *    já vende bem, reforçar mídia amplia o que já funciona.
  *  - LIQUIDAR: status excesso/estoque_morto (replenishment_plan.status) —
  *    capital parado, precisa de campanha de desconto pra girar.
+ *  - PERDENDO_BUYBOX: products.buybox_winner = false, priorizado por
+ *    faturamento (replenishment_plan.revenue_30d) — perder Buy Box num
+ *    produto que vende 300/mês não é o mesmo que num que vende 2 (roadmap
+ *    "Curva ABC × Buy Box"). Não depende de scraper nem API: só lê o que
+ *    já foi importado do relatório de Buy Box / Seller Center.
  */
 class MarketingOpportunityService
 {
     public const LANCAMENTO = 'lancamento';
     public const MAIS_VENDIDO = 'mais_vendido';
     public const LIQUIDAR = 'liquidar';
+    public const PERDENDO_BUYBOX = 'perdendo_buybox';
 
     private const DEFAULT_LAUNCH_WINDOW_DAYS = 60;
+    private const BUYBOX_SCAN_LIMIT = 300;
 
-    /** Resumo com as três categorias, já prontas pro dashboard. */
+    /** Resumo com as quatro categorias, já prontas pro dashboard. */
     public function opportunities(int $companyId, int $limitPerType = 20): array
     {
         return [
             self::LANCAMENTO => $this->launches($companyId, $limitPerType),
             self::MAIS_VENDIDO => $this->bestSellers($companyId, $limitPerType),
             self::LIQUIDAR => $this->liquidationCandidates($companyId, $limitPerType),
+            self::PERDENDO_BUYBOX => $this->buyboxLosses($companyId, $limitPerType),
         ];
     }
 
@@ -151,5 +159,72 @@ class MarketingOpportunityService
                     ? sprintf('Sem venda recente — R$ %s parados em estoque. Campanha de liquidação libera capital.', number_format((float) $p->immobilized_value, 2, ',', '.'))
                     : sprintf('Cobertura de %s dias, muito acima do normal — desconto agressivo acelera o giro antes de virar estoque morto.', $p->coverage_days !== null ? number_format((float) $p->coverage_days, 0, ',', '.') : '?'),
             ])->all();
+    }
+
+    /**
+     * Perdendo Buy Box: produtos com `buybox_winner = false`, priorizados por
+     * faturamento (não por contagem — ver §5.2 do CLAUDE.md sobre offerCount).
+     * Só considera produtos com `monitored = true` quando a coluna existe.
+     */
+    public function buyboxLosses(int $companyId, int $limit = 20): array
+    {
+        if (!Schema::hasTable('products') || !Schema::hasColumn('products', 'buybox_winner')) {
+            return [];
+        }
+
+        $query = DB::table('products')
+            ->where('company_id', $companyId)
+            ->where('buybox_winner', false);
+
+        if (Schema::hasColumn('products', 'monitored')) {
+            $query->where('monitored', true);
+        }
+
+        $products = $query
+            ->limit(self::BUYBOX_SCAN_LIMIT)
+            ->select(['id', 'sku', 'title', 'brand', 'sale_price', 'market_price', 'market_seller'])
+            ->get();
+
+        if ($products->isEmpty()) {
+            return [];
+        }
+
+        $plan = Schema::hasTable('replenishment_plan')
+            ? DB::table('replenishment_plan')
+                ->where('company_id', $companyId)
+                ->whereIn('product_id', $products->pluck('id'))
+                ->get(['product_id', 'revenue_30d', 'abc_class'])
+                ->keyBy('product_id')
+            : collect();
+
+        return $products->map(function ($p) use ($plan) {
+            $row = $plan[$p->id] ?? null;
+            $revenue = $row ? (float) $row->revenue_30d : 0.0;
+            $abc = $row->abc_class ?? null;
+
+            return [
+                'product_id' => $p->id,
+                'sku' => $p->sku,
+                'title' => $p->title,
+                'brand' => $p->brand,
+                'sale_price' => (float) $p->sale_price,
+                'market_price' => $p->market_price !== null ? (float) $p->market_price : null,
+                'market_seller' => $p->market_seller,
+                'revenue_30d' => $revenue,
+                'abc_class' => $abc,
+                'reason' => sprintf(
+                    'Perdendo Buy Box%s%s. %s',
+                    $p->market_seller ? ' para ' . $p->market_seller : '',
+                    $abc ? ' — curva ' . $abc : '',
+                    $revenue > 0
+                        ? 'Faturou R$ ' . number_format($revenue, 2, ',', '.') . ' em 30 dias — recuperar aqui evita perda direta de receita.'
+                        : 'Ainda sem dado de faturamento recente.'
+                ),
+            ];
+        })
+            ->sortByDesc('revenue_30d')
+            ->take($limit)
+            ->values()
+            ->all();
     }
 }

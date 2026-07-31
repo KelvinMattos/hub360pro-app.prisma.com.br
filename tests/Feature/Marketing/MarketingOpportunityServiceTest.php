@@ -133,5 +133,50 @@ class MarketingOpportunityServiceTest extends TestCase
         $this->assertSame([], $result['lancamento']);
         $this->assertSame([], $result['mais_vendido']);
         $this->assertSame([], $result['liquidar']);
+        $this->assertSame([], $result['perdendo_buybox']);
+    }
+
+    public function test_buybox_losses_returns_only_products_losing_buybox_ordered_by_revenue(): void
+    {
+        $losingHighRevenue = $this->makeProduct(['buybox_winner' => false]);
+        $losingLowRevenue = $this->makeProduct(['buybox_winner' => false]);
+        $winning = $this->makeProduct(['buybox_winner' => true]);
+        $unknown = $this->makeProduct(['buybox_winner' => null]);
+
+        $this->makeReplenishmentRow($losingHighRevenue, ['revenue_30d' => 5000, 'abc_class' => 'A']);
+        $this->makeReplenishmentRow($losingLowRevenue, ['revenue_30d' => 100, 'abc_class' => 'C']);
+        $this->makeReplenishmentRow($winning, ['revenue_30d' => 9000, 'abc_class' => 'A']);
+
+        $result = $this->service->buyboxLosses($this->companyId);
+
+        $ids = collect($result)->pluck('product_id');
+        $this->assertCount(2, $result);
+        $this->assertSame($losingHighRevenue, $result[0]['product_id']); // maior faturamento primeiro
+        $this->assertSame($losingLowRevenue, $result[1]['product_id']);
+        $this->assertFalse($ids->contains($winning));
+        $this->assertFalse($ids->contains($unknown));
+    }
+
+    public function test_buybox_losses_respects_monitored_flag(): void
+    {
+        $hidden = $this->makeProduct(['buybox_winner' => false, 'monitored' => false]);
+        $visible = $this->makeProduct(['buybox_winner' => false, 'monitored' => true]);
+
+        $result = $this->service->buyboxLosses($this->companyId);
+
+        $ids = collect($result)->pluck('product_id');
+        $this->assertTrue($ids->contains($visible));
+        $this->assertFalse($ids->contains($hidden));
+    }
+
+    public function test_buybox_losses_works_without_replenishment_data(): void
+    {
+        $productId = $this->makeProduct(['buybox_winner' => false]);
+
+        $result = $this->service->buyboxLosses($this->companyId);
+
+        $row = collect($result)->firstWhere('product_id', $productId);
+        $this->assertNotNull($row);
+        $this->assertSame(0.0, $row['revenue_30d']);
     }
 }

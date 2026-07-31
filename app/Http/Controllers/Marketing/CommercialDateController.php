@@ -54,7 +54,7 @@ class CommercialDateController extends Controller
     {
         $companyId = Auth::user()?->company_id;
         if (!$companyId) {
-            return back()->withErrors(['company' => 'Empresa não identificada.']);
+            return back()->with('error', 'Empresa não identificada.');
         }
 
         $data = $request->validate([
@@ -96,7 +96,7 @@ class CommercialDateController extends Controller
     {
         $companyId = Auth::user()?->company_id;
         if (!$companyId) {
-            return back()->withErrors(['company' => 'Empresa não identificada.']);
+            return back()->with('error', 'Empresa não identificada.');
         }
 
         $request->validate(['file' => ['required', 'file', 'mimes:csv,txt', 'max:10240']]);
@@ -139,7 +139,7 @@ class CommercialDateController extends Controller
                 $created++;
             }
         } catch (\Throwable $e) {
-            return back()->withErrors(['file' => 'Falha ao importar: ' . $e->getMessage()]);
+            return back()->with('error', 'Falha ao importar: ' . $e->getMessage());
         }
 
         return back()->with('success', "Datas importadas: {$created} criadas, {$skipped} ignoradas (de {$rows} linhas).");

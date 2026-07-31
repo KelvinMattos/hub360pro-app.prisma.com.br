@@ -32,6 +32,26 @@ class CampaignControllerTest extends TestCase
         ], $overrides));
     }
 
+    private function makeReplenishmentRow(int $productId, array $overrides = []): void
+    {
+        DB::table('replenishment_plan')->insert(array_merge([
+            'company_id' => $this->companyId, 'product_id' => $productId,
+            'sku' => 'SKU', 'title' => 'Produto', 'brand' => null,
+            'stock' => 10, 'cost_price' => 50, 'sale_price' => 100,
+            'velocity_weighted' => 0, 'status' => 'saudavel',
+            'computed_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ], $overrides));
+    }
+
+    private function makeCommercialDate(array $overrides = []): int
+    {
+        return DB::table('commercial_dates')->insertGetId(array_merge([
+            'company_id' => null, 'date' => '2026-11-27', 'title' => 'Black Friday',
+            'category' => 'sazonal', 'recurring_yearly' => true, 'source' => 'seed',
+            'created_at' => now(), 'updated_at' => now(),
+        ], $overrides));
+    }
+
     public function test_index_lists_only_company_campaigns(): void
     {
         DB::table('marketing_campaigns')->insert([
@@ -102,6 +122,86 @@ class CampaignControllerTest extends TestCase
         $response->assertRedirect();
         $campaign = DB::table('marketing_campaigns')->where('name', 'Teste')->first();
         $this->assertSame(0, DB::table('marketing_campaign_products')->where('campaign_id', $campaign->id)->count());
+    }
+
+    public function test_create_from_date_bundles_best_sellers_and_liquidation_candidates(): void
+    {
+        $bestSeller = $this->makeProduct();
+        $deadStock = $this->makeProduct();
+        $this->makeReplenishmentRow($bestSeller, ['abc_class' => 'A', 'revenue_30d' => 5000]);
+        $this->makeReplenishmentRow($deadStock, ['status' => 'estoque_morto', 'immobilized_value' => 3000]);
+        $dateId = $this->makeCommercialDate();
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertRedirect();
+        $campaign = DB::table('marketing_campaigns')->where('source_opportunity', 'calendario')->first();
+        $this->assertNotNull($campaign);
+        $this->assertSame('sazonal', $campaign->type);
+        $this->assertStringContainsString('Black Friday', $campaign->name);
+
+        $this->assertDatabaseHas('marketing_campaign_products', [
+            'campaign_id' => $campaign->id, 'product_id' => $bestSeller, 'suggested_action' => 'anunciar',
+        ]);
+        $this->assertDatabaseHas('marketing_campaign_products', [
+            'campaign_id' => $campaign->id, 'product_id' => $deadStock, 'suggested_action' => 'liquidar',
+        ]);
+    }
+
+    public function test_create_from_date_dedupes_product_in_both_lists(): void
+    {
+        // Curva A que também está com excesso de estoque: aparece nas duas listas do motor.
+        $productId = $this->makeProduct();
+        $this->makeReplenishmentRow($productId, ['abc_class' => 'A', 'revenue_30d' => 5000, 'status' => 'excesso', 'immobilized_value' => 9000]);
+        $dateId = $this->makeCommercialDate();
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertRedirect();
+        $campaign = DB::table('marketing_campaigns')->where('source_opportunity', 'calendario')->first();
+        $this->assertSame(1, DB::table('marketing_campaign_products')->where('campaign_id', $campaign->id)->where('product_id', $productId)->count());
+    }
+
+    public function test_create_from_date_fails_gracefully_without_eligible_products(): void
+    {
+        $dateId = $this->makeCommercialDate();
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+        $this->assertSame(0, DB::table('marketing_campaigns')->count());
+    }
+
+    public function test_create_from_date_404_for_date_from_another_company(): void
+    {
+        $otherCompany = DB::table('companies')->insertGetId(['name' => 'Outra', 'created_at' => now(), 'updated_at' => now()]);
+        $dateId = $this->makeCommercialDate(['company_id' => $otherCompany, 'source' => 'manual']);
+
+        $response = $this->actingAs($this->user)->post(route('marketing.campaigns.from-date', $dateId));
+
+        $response->assertNotFound();
+    }
+
+    /**
+     * Alguns hosts/proxies na frente da produção filtram verbos HTTP não-padrão
+     * (ver CLAUDE.md §6.3, Cloudflare na frente da origem) — o Kanban passou a
+     * mandar POST + "?_method=PATCH" na query string em vez de um PATCH literal
+     * (resources/js/lib/spoofedRouter.js). Este teste garante que o mecanismo
+     * nativo do Symfony/Laravel realmente aceita esse spoof pra essa rota.
+     */
+    public function test_update_stage_accepts_method_override_via_post(): void
+    {
+        $campaignId = DB::table('marketing_campaigns')->insertGetId([
+            'company_id' => $this->companyId, 'name' => 'Campanha', 'stage' => 'ideia',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $url = route('marketing.campaigns.stage', $campaignId) . '?_method=PATCH';
+        $response = $this->actingAs($this->user)->post($url, ['stage' => 'execucao']);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('marketing_campaigns', ['id' => $campaignId, 'stage' => 'execucao']);
     }
 
     public function test_update_stage_moves_campaign_on_kanban(): void
