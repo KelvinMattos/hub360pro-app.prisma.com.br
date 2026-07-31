@@ -149,7 +149,10 @@
                         <tbody>
                             <tr v-for="r in recentes" :key="r.pedido" class="border-t border-slate-100 hover:bg-slate-50/60">
                                 <td class="td-l font-mono">{{ r.pedido }}</td>
-                                <td class="td-l max-w-[220px] truncate" :title="r.cliente">{{ r.cliente }}</td>
+                                <td class="td-l max-w-[220px] truncate" :title="r.cliente">
+                                    <Link v-if="r.doc" :href="route('customers.show', r.doc)" class="text-blue-600 hover:underline font-semibold">{{ r.cliente }}</Link>
+                                    <span v-else>{{ r.cliente }}</span>
+                                </td>
                                 <td class="td-l">{{ r.canal }}</td>
                                 <td class="td-l"><span class="pill" :class="statusClass(r.status)">{{ statusLabel(r.status) }}</span></td>
                                 <td class="td-r font-semibold">{{ money(r.total) }}</td>
@@ -165,7 +168,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import BarList from '@/Components/Sales/BarList.vue';
 import MonthlyTrendChart from '@/Components/Sales/MonthlyTrendChart.vue';

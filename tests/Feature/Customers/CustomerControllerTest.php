@@ -107,6 +107,82 @@ class CustomerControllerTest extends TestCase
         );
     }
 
+    public function test_show_uses_customer_name_when_present(): void
+    {
+        $this->insertOrder(['customer_doc' => '11111111111', 'customer_name' => 'Cliente Direto', 'total_amount' => 100]);
+
+        $response = $this->actingAs($this->user)->get(route('customers.show', '11111111111'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page->where('customer.customer_name', 'Cliente Direto'));
+    }
+
+    public function test_show_falls_back_to_any_order_with_a_name_when_first_lacks_one(): void
+    {
+        // Pedido mais recente sem nome, mas um pedido mais antigo do mesmo
+        // CPF tem — o perfil não deve ficar sem nome só por causa da ordem.
+        $this->insertOrder(['customer_doc' => '11111111111', 'buyer_nickname' => null, 'date_created' => now()]);
+        $this->insertOrder(['customer_doc' => '11111111111', 'buyer_nickname' => 'Cliente Antigo', 'date_created' => now()->subDay()]);
+
+        $response = $this->actingAs($this->user)->get(route('customers.show', '11111111111'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page->where('customer.customer_name', 'Cliente Antigo'));
+    }
+
+    /** Perfil de consumo: produtos comprados (via order_items), independente do pedido. */
+    public function test_show_includes_products_purchased_across_all_orders(): void
+    {
+        $order1 = DB::table('orders')->insertGetId(array_merge([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 200,
+            'customer_doc' => '11111111111', 'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]));
+        $order2 = DB::table('orders')->insertGetId(array_merge([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 100,
+            'customer_doc' => '11111111111', 'date_created' => now()->subDay(), 'created_at' => now(), 'updated_at' => now(),
+        ]));
+        DB::table('order_items')->insert([
+            ['order_id' => $order1, 'sku' => 'A1', 'title' => 'Produto A', 'quantity' => 2, 'unit_price' => 100, 'created_at' => now(), 'updated_at' => now()],
+            ['order_id' => $order2, 'sku' => 'A1', 'title' => 'Produto A', 'quantity' => 1, 'unit_price' => 100, 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('customers.show', '11111111111'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('produtos.0.sku', 'A1')
+            ->where('produtos.0.unidades', 3)
+            ->where('produtos.0.total', 300)
+        );
+    }
+
+    public function test_show_includes_channel_breakdown(): void
+    {
+        $this->insertOrder(['customer_doc' => '11111111111', 'selling_channel' => 'mercadolivre', 'total_amount' => 100]);
+        $this->insertOrder(['customer_doc' => '11111111111', 'selling_channel' => 'mercadolivre', 'total_amount' => 50]);
+        $this->insertOrder(['customer_doc' => '11111111111', 'selling_channel' => 'magazord', 'total_amount' => 200]);
+
+        $response = $this->actingAs($this->user)->get(route('customers.show', '11111111111'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('por_canal.0.canal', 'magazord')
+            ->where('por_canal.0.total', 200)
+            ->where('por_canal.1.canal', 'mercadolivre')
+            ->where('por_canal.1.pedidos', 2)
+        );
+    }
+
+    public function test_show_includes_recency_stats(): void
+    {
+        $this->insertOrder(['customer_doc' => '11111111111', 'date_created' => now()->subDays(10)]);
+
+        $response = $this->actingAs($this->user)->get(route('customers.show', '11111111111'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page->where('stats.days_since_last_purchase', 10));
+    }
+
     public function test_show_redirects_with_error_when_customer_not_found(): void
     {
         $response = $this->actingAs($this->user)->get(route('customers.show', '00000000000'));

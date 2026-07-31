@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Customers\CustomerIdentityService;
 use App\Services\Sales\SalesAnalyticsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -84,7 +85,10 @@ class SalesController extends Controller
         $channelCol = $has('selling_channel') ? 'selling_channel' : null;
         $dateCol = $has('date_created') ? 'date_created' : ($has('order_date') ? 'order_date' : ($has('created_at') ? 'created_at' : null));
         $hasMlOrderId = $has('ml_order_id');
-        $buyerNameCol = $has('buyer_nickname') ? 'buyer_nickname' : null;
+        $hasCustomerName = $has('customer_name');
+        $hasBuyerNickname = $has('buyer_nickname');
+        $hasBillingDoc = $has('billing_doc_number');
+        $hasCustomerDoc = $has('customer_doc');
         $canJoinCustomers = $has('customer_id') && Schema::hasTable('customers') && Schema::hasColumn('customers', 'name');
         $hasCompany = $has('company_id');
         $since = Carbon::now()->subDays($days);
@@ -114,14 +118,29 @@ class SalesController extends Controller
             $selRec[] = "o.$channelCol as canal";
         }
         // Nome do cliente: prioriza customers.name (alimentado por qualquer
-        // origem, via customer_id), cai pro buyer_nickname (só Mercado Livre)
-        // quando não há cliente casado.
-        if ($canJoinCustomers && $buyerNameCol) {
-            $selRec[] = "COALESCE(c.name, o.$buyerNameCol) as cliente";
+        // origem, via customer_id), cai pro customer_name/buyer_nickname do
+        // próprio pedido — nessa ordem, senão pedidos Magazord/Netshoes
+        // (que gravam em customer_name, não buyer_nickname) ficavam em branco.
+        $orderNameExpr = match (true) {
+            $hasCustomerName && $hasBuyerNickname => 'o.customer_name, o.buyer_nickname',
+            $hasCustomerName => 'o.customer_name',
+            $hasBuyerNickname => 'o.buyer_nickname',
+            default => null,
+        };
+        if ($canJoinCustomers && $orderNameExpr) {
+            $selRec[] = "COALESCE(c.name, $orderNameExpr) as cliente";
         } elseif ($canJoinCustomers) {
             $selRec[] = 'c.name as cliente';
-        } elseif ($buyerNameCol) {
-            $selRec[] = "o.$buyerNameCol as cliente";
+        } elseif ($orderNameExpr) {
+            $selRec[] = "COALESCE($orderNameExpr) as cliente";
+        }
+        // CPF normalizado, pra "Cliente" virar link pro perfil de consumo.
+        if ($hasBillingDoc || $hasCustomerDoc) {
+            $docExpr = CustomerIdentityService::sqlDocExpr(
+                $hasBillingDoc ? 'o.billing_doc_number' : 'NULL',
+                $hasCustomerDoc ? 'o.customer_doc' : 'NULL'
+            );
+            $selRec[] = "$docExpr as doc";
         }
         if ($dateCol) {
             $selRec[] = "o.$dateCol as data";
@@ -135,6 +154,7 @@ class SalesController extends Controller
         return $q->limit(40)->get()->map(fn ($r) => [
             'pedido' => $r->pedido,
             'cliente' => $r->cliente ?? '—',
+            'doc' => (isset($r->doc) && $r->doc !== '') ? $r->doc : null,
             'canal' => $r->canal ?? '—',
             'status' => $r->status ?? '—',
             'total' => (float) $r->total,
