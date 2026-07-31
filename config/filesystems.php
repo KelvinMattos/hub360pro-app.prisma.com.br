@@ -49,7 +49,11 @@ return [
 
         'notas_fiscais' => [
             'driver' => 'local',
-            'root' => env('NOTAS_FISCAIS_PATH', '/app.prismaads.com.br/storage/notas-fiscais'),
+            // storage_path() resolve certo em qualquer host — o caminho absoluto do
+            // servidor (cPanel costuma ter um prefixo tipo /home2/<usuario>/) nunca
+            // deveria ficar hardcoded aqui. Sobrescreva via NOTAS_FISCAIS_PATH se os
+            // PDFs ficarem fora da pasta storage/ do próprio app.
+            'root' => env('NOTAS_FISCAIS_PATH', storage_path('notas-fiscais')),
             'throw' => false,
             'report' => false,
         ],

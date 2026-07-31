@@ -154,6 +154,28 @@ class NotaFiscalIndexServiceTest extends TestCase
         $this->assertNotNull($corrompido->error);
     }
 
+    /**
+     * Incidente real: em produção, o Flysystem local tenta CRIAR a raiz do
+     * disco assim que é resolvido, e derrubava com uma exceção crua
+     * ("Unable to create a directory") em vez de um erro tratável — o
+     * `indexAll()` nunca chegava a rodar. Reproduzido aqui apontando a raiz
+     * pra um caminho ocupado por um arquivo comum (mkdir falha mesmo como
+     * root, ao contrário de um diretório simplesmente ausente).
+     */
+    public function test_pasta_inacessivel_retorna_erro_tratavel_em_vez_de_estourar(): void
+    {
+        $companyId = DB::table('companies')->insertGetId(['name' => 'Empresa', 'created_at' => now(), 'updated_at' => now()]);
+        $arquivoNoLugarDaPasta = tempnam(sys_get_temp_dir(), 'nota-fiscal-root-');
+        config(['filesystems.disks.notas_fiscais.root' => $arquivoNoLugarDaPasta]);
+
+        $result = app(NotaFiscalIndexService::class)->indexAll($companyId);
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('inacessível', $result['error']);
+
+        unlink($arquivoNoLugarDaPasta);
+    }
+
     public function test_isola_por_empresa(): void
     {
         $companyA = DB::table('companies')->insertGetId(['name' => 'A', 'created_at' => now(), 'updated_at' => now()]);
