@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 
 /**
@@ -157,8 +158,17 @@ class CampaignController extends Controller
             ->first();
         abort_unless($commercialDate, 404);
 
-        $bestSellers = collect($opportunities->bestSellers($companyId, 5))->pluck('product_id');
-        $liquidation = collect($opportunities->liquidationCandidates($companyId, 5))->pluck('product_id');
+        $audience = Schema::hasColumn('commercial_dates', 'audience') ? $commercialDate->audience : null;
+
+        // Busca um pool maior que o necessário porque, quando a data tem
+        // público-alvo (Mães/Pais), parte dos melhores candidatos por venda
+        // pode ser do gênero errado pra essa data e precisa ser descartada.
+        $bestSellers = collect($opportunities->bestSellers($companyId, 20))
+            ->reject(fn ($p) => $this->excludedByAudience($p['title'] ?? '', $audience))
+            ->take(5);
+        $liquidation = collect($opportunities->liquidationCandidates($companyId, 20))
+            ->reject(fn ($p) => $this->excludedByAudience($p['title'] ?? '', $audience))
+            ->take(5);
 
         if ($bestSellers->isEmpty() && $liquidation->isEmpty()) {
             return back()->with('error', 'Sem produtos elegíveis (mais vendidos ou parados) pra sugerir campanha nesta data ainda.');
@@ -188,19 +198,19 @@ class CampaignController extends Controller
         // reforçar mídia num produto que já vende bem.
         $rows = [];
         $seen = [];
-        foreach ($liquidation as $productId) {
-            if (isset($seen[$productId])) {
+        foreach ($liquidation as $p) {
+            if (isset($seen[$p['product_id']])) {
                 continue;
             }
-            $seen[$productId] = true;
-            $rows[] = ['campaign_id' => $campaignId, 'product_id' => $productId, 'suggested_action' => 'liquidar', 'created_at' => now(), 'updated_at' => now()];
+            $seen[$p['product_id']] = true;
+            $rows[] = ['campaign_id' => $campaignId, 'product_id' => $p['product_id'], 'suggested_action' => 'liquidar', 'created_at' => now(), 'updated_at' => now()];
         }
-        foreach ($bestSellers as $productId) {
-            if (isset($seen[$productId])) {
+        foreach ($bestSellers as $p) {
+            if (isset($seen[$p['product_id']])) {
                 continue;
             }
-            $seen[$productId] = true;
-            $rows[] = ['campaign_id' => $campaignId, 'product_id' => $productId, 'suggested_action' => 'anunciar', 'created_at' => now(), 'updated_at' => now()];
+            $seen[$p['product_id']] = true;
+            $rows[] = ['campaign_id' => $campaignId, 'product_id' => $p['product_id'], 'suggested_action' => 'anunciar', 'created_at' => now(), 'updated_at' => now()];
         }
 
         if (!empty($rows)) {
@@ -209,6 +219,28 @@ class CampaignController extends Controller
 
         return redirect()->route('marketing.campaigns.show', $campaignId)
             ->with('success', 'Campanha criada para ' . $commercialDate->title . ' com ' . count($rows) . ' produto(s) sugerido(s).');
+    }
+
+    /**
+     * Incidente: o kit sugerido pro Dia dos Pais recomendou produto "Feminino"
+     * — o motor de oportunidades não tem noção de público, só de venda/estoque.
+     * Exclusão simples por palavra no título (não é uma classificação real de
+     * gênero do produto, só descarta o caso óbvio: gênero oposto explícito no
+     * título).
+     */
+    private function excludedByAudience(string $title, ?string $audience): bool
+    {
+        if (!$audience) {
+            return false;
+        }
+
+        $title = mb_strtolower($title);
+
+        return match ($audience) {
+            'masculino' => (bool) preg_match('/feminin[oa]/u', $title),
+            'feminino' => (bool) preg_match('/masculin[oa]/u', $title),
+            default => false,
+        };
     }
 
     public function show(int $campaign)
