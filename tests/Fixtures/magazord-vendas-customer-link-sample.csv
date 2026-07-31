@@ -1,0 +1,4 @@
+Pedido Id;Código;Data/Hora;Cliente;CPF/CNPJ;Situação;Marketplace;Forma de Pagamento;Valor Total Pedido
+5001;COD1;01/07/2026 10:00:00;Cliente A;111.111.111-11;Transporte;Magazord;PIX;150,00
+5002;COD2;02/07/2026 11:00:00;Cliente A;11111111111;Faturado;Magazord;PIX;80,00
+5003;COD3;03/07/2026 12:00:00;Cliente Novo;222.333.444-55;Faturado;Magazord;Cartao;60,00

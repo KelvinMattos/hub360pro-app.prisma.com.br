@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Netshoes;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Services\Customers\CustomerIdentityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -339,6 +340,8 @@ class NetshoesImportController extends Controller
         $dateCol = $pick(['date_created', 'order_date']);
         $hasCompany = in_array('company_id', $cols, true);
         $hasTimestamps = in_array('created_at', $cols, true);
+        $hasCustomerId = in_array('customer_id', $cols, true);
+        $customerIdentity = $hasCustomerId ? app(CustomerIdentityService::class) : null;
 
         if (!$keyCol) {
             return $this->fail(new \RuntimeException('A tabela orders não possui coluna de identificador (external_id/ml_order_id).'));
@@ -380,16 +383,30 @@ class NetshoesImportController extends Controller
                 if ($total === null) { $skipped++; continue; }
 
                 $marketplace = $this->col($row, ['Site Origem da Venda']);
+                $docRaw = $this->col($row, ['CPF/CNPJ do Comprador']);
+                $nameRaw = $this->col($row, ['Nome do Comprador']);
+                $channelRaw = $marketplace ? ucwords(mb_strtolower($marketplace)) : 'Netshoes';
 
                 $payload = [$keyCol => $numero];
-                if ($nameCol) $payload[$nameCol] = $this->col($row, ['Nome do Comprador']);
-                if ($docCol) $payload[$docCol] = $this->col($row, ['CPF/CNPJ do Comprador']);
-                if ($channelCol) $payload[$channelCol] = $marketplace ? ucwords(mb_strtolower($marketplace)) : 'Netshoes';
+                if ($nameCol) $payload[$nameCol] = $nameRaw;
+                if ($docCol) $payload[$docCol] = $docRaw;
+                if ($channelCol) $payload[$channelCol] = $channelRaw;
                 if ($payCol) $payload[$payCol] = $this->col($row, ['Forma de pagamento']);
                 if ($statusCol) $payload[$statusCol] = $this->mapStatus($this->col($row, ['Status do Pedido']));
                 if ($totalCol) $payload[$totalCol] = $total;
                 if ($paidCol) $payload[$paidCol] = $total;
                 if ($dateCol) $payload[$dateCol] = $this->parseDate($this->col($row, ['Data da Compra']));
+
+                // CPF é a chave que une o mesmo cliente entre canais — ver
+                // CustomerIdentityService.
+                if ($customerIdentity) {
+                    $customer = $customerIdentity->findOrCreate($companyId, [
+                        'doc_number' => $docRaw, 'name' => $nameRaw, 'origin_channel' => $channelRaw,
+                    ]);
+                    if ($customer) {
+                        $payload['customer_id'] = $customer->id;
+                    }
+                }
 
                 $query = DB::table('orders')->where($keyCol, $numero);
                 if ($hasCompany) $query->where('company_id', $companyId);
