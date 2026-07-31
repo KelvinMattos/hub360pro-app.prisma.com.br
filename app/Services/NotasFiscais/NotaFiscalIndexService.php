@@ -19,10 +19,24 @@ class NotaFiscalIndexService
 {
     public function indexAll(int $companyId, bool $force = false, ?callable $onProgress = null): array
     {
-        $disk = Storage::disk('notas_fiscais');
+        // O adapter local do Flysystem tenta CRIAR a raiz configurada assim que
+        // é instanciado (ao resolver o disco) — se não conseguir (permissão,
+        // caminho errado), derruba com uma exceção feia em vez de um erro
+        // tratável. Isola a resolução do disco pra converter isso num retorno
+        // gracioso, sem nunca afirmar sucesso que não aconteceu (CLAUDE.md §2.4).
+        try {
+            $disk = Storage::disk('notas_fiscais');
+            $pastaExiste = $disk->exists('');
+        } catch (Throwable $e) {
+            $root = config('filesystems.disks.notas_fiscais.root');
 
-        if (! $disk->exists('')) {
-            return ['ok' => false, 'error' => 'Pasta de notas fiscais não encontrada ou inacessível.', 'indexed' => 0, 'failed' => 0, 'skipped' => 0];
+            return ['ok' => false, 'error' => "Pasta de notas fiscais inacessível em \"{$root}\": {$e->getMessage()}", 'indexed' => 0, 'failed' => 0, 'skipped' => 0, 'total' => 0];
+        }
+
+        if (! $pastaExiste) {
+            $root = config('filesystems.disks.notas_fiscais.root');
+
+            return ['ok' => false, 'error' => "Pasta de notas fiscais não encontrada em \"{$root}\". Confirme o caminho (configurável via NOTAS_FISCAIS_PATH no .env).", 'indexed' => 0, 'failed' => 0, 'skipped' => 0, 'total' => 0];
         }
 
         $files = collect($disk->allFiles())
