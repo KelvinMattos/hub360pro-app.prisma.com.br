@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use App\Models\Order;
+use App\Services\Customers\CustomerIdentityService;
 use Inertia\Inertia;
 
 /**
@@ -24,7 +25,7 @@ class CustomerController extends Controller
 {
     public function index(Request $request)
     {
-        $docExpr = $this->docExpr();
+        $docExpr = CustomerIdentityService::sqlDocExpr();
         $nameExpr = $this->nameExpr();
 
         $query = Order::where('company_id', Auth::user()->company_id)
@@ -54,9 +55,14 @@ class CustomerController extends Controller
         ]);
     }
 
+    /**
+     * Perfil de consumo completo do cliente: LTV, frequência, ticket médio,
+     * recência, produtos comprados (via order_items) e canais usados —
+     * tudo sobre o histórico de compras dele, não só a lista de pedidos.
+     */
     public function show($doc)
     {
-        $docExpr = $this->docExpr();
+        $docExpr = CustomerIdentityService::sqlDocExpr();
         $docClean = preg_replace('/[^0-9]/', '', (string) $doc);
 
         $orders = Order::where('company_id', Auth::user()->company_id)
@@ -72,25 +78,61 @@ class CustomerController extends Controller
         // Garante que a tela mostre o CPF normalizado mesmo se este pedido em
         // particular só tiver preenchido customer_doc (não billing_doc_number).
         $customer->billing_doc_number = $docClean;
+        // Alguns pedidos do mesmo cliente podem ter vindo sem nome — usa o
+        // primeiro não vazio entre todos os pedidos dele.
+        $customer->customer_name = $this->bestName($orders);
+
+        $mostRecent = $orders->first();
+        $oldest = $orders->last();
+        $totalOrders = $orders->count();
+        $totalSpent = (float) $orders->sum('total_amount');
 
         $stats = [
-            'total_spent' => $orders->sum('total_amount'),
-            'total_orders' => $orders->count(),
-            'avg_ticket' => $orders->count() > 0 ? $orders->sum('total_amount') / $orders->count() : 0,
-            'first_purchase' => $orders->last()->date_created
+            'total_spent' => $totalSpent,
+            'total_orders' => $totalOrders,
+            'avg_ticket' => $totalOrders > 0 ? $totalSpent / $totalOrders : 0,
+            'first_purchase' => $oldest->date_created,
+            'last_purchase' => $mostRecent->date_created,
+            'days_since_last_purchase' => $mostRecent->date_created ? (int) abs(now()->diffInDays($mostRecent->date_created)) : null,
         ];
+
+        $porCanal = $orders->groupBy(fn ($o) => $o->selling_channel ?: 'Sem canal')
+            ->map(fn ($group, $canal) => [
+                'canal' => $canal, 'pedidos' => $group->count(), 'total' => (float) $group->sum('total_amount'),
+            ])
+            ->sortByDesc('total')
+            ->values()
+            ->all();
+
+        $produtos = [];
+        if (Schema::hasTable('order_items')) {
+            $produtos = DB::table('order_items')
+                ->whereIn('order_id', $orders->pluck('id'))
+                ->select(
+                    'sku',
+                    DB::raw('MAX(title) as titulo'),
+                    DB::raw('SUM(quantity) as unidades'),
+                    DB::raw('SUM(unit_price * quantity) as total')
+                )
+                ->groupBy('sku')
+                ->orderByDesc('total')
+                ->get()
+                ->map(fn ($r) => [
+                    'sku' => $r->sku,
+                    'titulo' => $r->titulo ?: ($r->sku ?: '—'),
+                    'unidades' => (int) $r->unidades,
+                    'total' => (float) $r->total,
+                ])
+                ->all();
+        }
 
         return Inertia::render('Customers/Show', [
             'customer' => $customer,
             'orders' => $orders,
-            'stats' => $stats
+            'stats' => $stats,
+            'por_canal' => $porCanal,
+            'produtos' => $produtos,
         ]);
-    }
-
-    /** CPF/CNPJ normalizado (só dígitos), qualquer que seja a coluna onde o canal de origem gravou. */
-    private function docExpr(): string
-    {
-        return "REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(billing_doc_number, customer_doc), '.', ''), '-', ''), '/', ''), ' ', '')";
     }
 
     /**
@@ -115,5 +157,21 @@ class CustomerController extends Controller
             return 'buyer_nickname';
         }
         return "'—'";
+    }
+
+    /** Primeiro nome não vazio entre os pedidos do cliente (alguns podem ter vindo sem nome). */
+    private function bestName($orders): ?string
+    {
+        $nameCols = array_values(array_intersect(['customer_name', 'buyer_nickname'], Schema::getColumnListing('orders')));
+
+        foreach ($orders as $order) {
+            foreach ($nameCols as $col) {
+                if (!empty($order->{$col})) {
+                    return $order->{$col};
+                }
+            }
+        }
+
+        return null;
     }
 }

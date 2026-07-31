@@ -76,7 +76,10 @@ class NetshoesImportVendasTest extends TestCase
         $this->assertSame('2026-06-29 16:54:36', $order->date_created);
         $this->assertSame('459.90', $order->total_amount);
         $this->assertSame('459.90', $order->total_paid_amount);
-        $this->assertSame('Cliente A', $order->buyer_nickname);
+        // customer_name existe desde a migration 2026_07_31_000009 — o
+        // $pick(['customer_name', 'buyer_nickname']) passa a preferir essa
+        // coluna (mais correta: funciona pra qualquer canal, não só ML).
+        $this->assertSame('Cliente A', $order->customer_name);
     }
 
     public function test_import_is_idempotent_on_reimport(): void

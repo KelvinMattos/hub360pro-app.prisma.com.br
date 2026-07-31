@@ -29,6 +29,17 @@ class CustomerIdentityService
     }
 
     /**
+     * Expressão SQL do CPF/CNPJ normalizado (só dígitos), dado o nome das
+     * colunas onde ele pode estar gravado — nunca as duas ao mesmo tempo.
+     * Usada por CustomerController e SalesController pra não duplicar de
+     * novo a mesma cadeia de REPLACE().
+     */
+    public static function sqlDocExpr(string $billingCol = 'billing_doc_number', string $docCol = 'customer_doc'): string
+    {
+        return "REPLACE(REPLACE(REPLACE(REPLACE(COALESCE($billingCol, $docCol), '.', ''), '-', ''), '/', ''), ' ', '')";
+    }
+
+    /**
      * Acha o cliente da empresa pelo CPF; sem isso, tenta por
      * (external_id + canal). Sem nenhum identificador confiável, retorna
      * null — nunca inventa um cliente sem nada que o identifique.

@@ -107,6 +107,52 @@ class SalesControllerTest extends TestCase
         $response->assertInertia(fn (Assert $page) => $page->where('recentes.0.cliente', 'Cliente Magazord'));
     }
 
+    /**
+     * Incidente: "Cliente" em Pedidos Recentes ficava em branco pra pedidos
+     * Magazord/Netshoes — o fallback só olhava buyer_nickname (exclusivo
+     * Mercado Livre), nunca customer_name (onde esses importadores gravam).
+     */
+    public function test_recentes_uses_customer_name_column_when_present(): void
+    {
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 100,
+            'customer_name' => 'Cliente Magazord Direto', 'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('sales.index'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page->where('recentes.0.cliente', 'Cliente Magazord Direto'));
+    }
+
+    /** O CPF normalizado acompanha cada pedido recente, pra "Cliente" virar link pro perfil de consumo. */
+    public function test_recentes_includes_normalized_doc_for_customer_link(): void
+    {
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 100,
+            'customer_doc' => '111.111.111-11', 'customer_name' => 'Cliente A',
+            'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('sales.index'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page->where('recentes.0.doc', '11111111111'));
+    }
+
+    public function test_recentes_doc_is_null_when_order_has_no_document(): void
+    {
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 100,
+            'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('sales.index'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page->where('recentes.0.doc', null));
+    }
+
     public function test_requires_authentication(): void
     {
         $response = $this->get(route('sales.index'));
