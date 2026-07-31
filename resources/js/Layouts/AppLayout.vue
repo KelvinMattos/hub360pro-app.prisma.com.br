@@ -156,6 +156,15 @@ const navigationConfig = [
         ]
     },
     {
+        title: 'Marketing',
+        items: [
+            { label: 'Visão Geral', route: 'marketing.dashboard', icon: 'fa-solid fa-bullseye' },
+            { label: 'Campanhas (Kanban)', route: 'marketing.campaigns.index', activePattern: 'marketing.campaigns.*', icon: 'fa-solid fa-table-columns' },
+            { label: 'Tarefas', route: 'marketing.tasks.index', icon: 'fa-solid fa-list-check' },
+            { label: 'Calendário Comercial', route: 'marketing.calendar.index', icon: 'fa-solid fa-calendar-days' },
+        ]
+    },
+    {
         title: 'Vendas & Mercados',
         items: [
             { label: 'Análise de Vendas', route: 'sales.index', icon: 'fa-solid fa-chart-simple' },
@@ -192,6 +201,7 @@ const navigationConfig = [
             { label: 'Importar Produtos com Desconto', route: 'magazord.show', params: { type: 'descontos' }, icon: 'fa-solid fa-percent' },
             { label: 'Importar Produtos & Datas', route: 'magazord.show', params: { type: 'produtos' }, icon: 'fa-solid fa-calendar-day' },
             { label: 'Importar Vendas', route: 'magazord.show', params: { type: 'vendas' }, icon: 'fa-solid fa-cart-shopping' },
+            { label: 'Importar Vendas por Item', route: 'magazord.show', params: { type: 'vendas_itens' }, icon: 'fa-solid fa-boxes-packing' },
         ]
     },
     {
