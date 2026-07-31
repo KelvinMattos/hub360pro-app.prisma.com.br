@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Magazord;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Services\Customers\CustomerIdentityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -672,6 +673,8 @@ class MagazordImportController extends Controller
         $dateCol = $pick(['date_created', 'order_date']);
         $hasCompany = in_array('company_id', $cols, true);
         $hasTimestamps = in_array('created_at', $cols, true);
+        $hasCustomerId = in_array('customer_id', $cols, true);
+        $customerIdentity = $hasCustomerId ? app(CustomerIdentityService::class) : null;
 
         if (!$keyCol) {
             return $this->fail(new \RuntimeException('A tabela orders não possui coluna de identificador (external_id/ml_order_id).'));
@@ -685,16 +688,33 @@ class MagazordImportController extends Controller
                 if ($externalId === null || $externalId === '') { $skipped++; continue; }
 
                 $total = $this->brNumber($this->col($row, ['Valor Total Pedido', 'Valor Total'])) ?? 0;
+                $docRaw = $this->col($row, ['CPF/CNPJ']);
+                $nameRaw = $this->col($row, ['Cliente']);
+                $emailRaw = $this->col($row, ['E-mail']);
+                $channelRaw = $this->col($row, ['Marketplace']) ?: $this->col($row, ['Loja']);
+
                 $payload = [$keyCol => $externalId];
-                if ($nameCol)   $payload[$nameCol]   = $this->col($row, ['Cliente']);
-                if ($emailCol)  $payload[$emailCol]  = $this->col($row, ['E-mail']);
-                if ($docCol)    $payload[$docCol]    = $this->col($row, ['CPF/CNPJ']);
-                if ($channelCol) $payload[$channelCol] = $this->col($row, ['Marketplace']) ?: $this->col($row, ['Loja']);
+                if ($nameCol)   $payload[$nameCol]   = $nameRaw;
+                if ($emailCol)  $payload[$emailCol]  = $emailRaw;
+                if ($docCol)    $payload[$docCol]    = $docRaw;
+                if ($channelCol) $payload[$channelCol] = $channelRaw;
                 if ($payCol)    $payload[$payCol]    = $this->col($row, ['Forma de Pagamento']);
                 if ($statusCol) $payload[$statusCol] = $this->mapStatus($this->col($row, ['Situação - Transporte']), $this->col($row, ['Situação']));
                 if ($totalCol)  $payload[$totalCol]  = $total;
                 if ($paidCol)   $payload[$paidCol]   = $total;
                 if ($dateCol)   $payload[$dateCol]   = $this->parseDate($this->col($row, ['Data/Hora', 'Data Aprovação']));
+
+                // CPF é a chave que une o mesmo cliente entre canais — ver
+                // CustomerIdentityService. Sem isso, cada importação criava um
+                // pedido "solto", sem nenhum vínculo com o histórico do cliente.
+                if ($customerIdentity) {
+                    $customer = $customerIdentity->findOrCreate($companyId, [
+                        'doc_number' => $docRaw, 'name' => $nameRaw, 'email' => $emailRaw, 'origin_channel' => $channelRaw,
+                    ]);
+                    if ($customer) {
+                        $payload['customer_id'] = $customer->id;
+                    }
+                }
 
                 $query = DB::table('orders')->where($keyCol, $externalId);
                 if ($hasCompany) $query->where('company_id', $companyId);
