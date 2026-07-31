@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Sales\SalesAnalyticsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -10,15 +11,13 @@ use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 
 /**
- * Análise de Vendas — construída sobre os pedidos importados do Magazord.
- * Faturamento por canal, por status, tendência diária e pedidos recentes.
- * Toda leitura é defensiva ao schema variável de `orders`.
+ * Central de Vendas — faturamento por canal, status, mês e região (via
+ * SalesAnalyticsService), tendência diária, marcas/produtos mais vendidos e
+ * pedidos recentes. Toda leitura é defensiva ao schema variável de `orders`.
  */
 class SalesController extends Controller
 {
-    private const FATURADO = ['approved', 'paid', 'shipped', 'delivered', 'accredited'];
-
-    public function index(Request $request)
+    public function index(Request $request, SalesAnalyticsService $analytics)
     {
         $user = Auth::user();
         if (!$user || !$user->company_id) {
@@ -30,113 +29,116 @@ class SalesController extends Controller
 
         return Inertia::render('Sales/Index', array_merge(
             ['days' => $days],
-            $this->build($companyId, $days)
+            $this->build($companyId, $days, $analytics)
         ));
     }
 
-    private function build(int $companyId, int $days): array
+    private function build(int $companyId, int $days, SalesAnalyticsService $analytics): array
     {
         $empty = [
-            'kpis' => ['faturamento' => 0, 'pedidos' => 0, 'ticket' => 0, 'cancelados' => 0, 'cancelado_valor' => 0],
-            'por_canal' => [], 'por_status' => [], 'por_dia' => [], 'recentes' => [], 'has_data' => false,
+            'kpis' => ['faturamento' => 0, 'pedidos' => 0, 'ticket' => 0, 'cancelados' => 0, 'cancelado_valor' => 0, 'variacao_pct' => null],
+            'por_canal' => [], 'por_status' => [], 'por_dia' => [], 'mensal' => [],
+            'por_regiao_estado' => [], 'por_regiao_macro' => [], 'por_marca' => [], 'top_produtos' => [],
+            'recentes' => [], 'has_data' => false,
         ];
 
         try {
-            if (!Schema::hasTable('orders')) return $empty;
-            $cols = Schema::getColumnListing('orders');
-            $has = fn ($c) => in_array($c, $cols, true);
-
-            $totalCol = $has('total_amount') ? 'total_amount' : null;
-            if (!$totalCol) return $empty;
-            $statusCol = $has('status') ? 'status' : null;
-            $channelCol = $has('selling_channel') ? 'selling_channel' : null;
-            // Data real do pedido (Data/Hora do Magazord) — NÃO usar created_at,
-            // que é o timestamp da importação (jogaria tudo no mesmo mês/dia).
-            $dateCol = $has('date_created') ? 'date_created'
-                : ($has('order_date') ? 'order_date'
-                : ($has('created_at') ? 'created_at' : null));
-            $keyCol = $has('external_id') ? 'external_id' : ($has('ml_order_id') ? 'ml_order_id' : 'id');
-            $nameCol = $has('customer_name') ? 'customer_name' : ($has('buyer_nickname') ? 'buyer_nickname' : null);
-            $hasCompany = $has('company_id');
-            $since = Carbon::now()->subDays($days);
-
-            $scope = function () use ($companyId, $hasCompany, $dateCol, $since) {
-                $q = DB::table('orders');
-                if ($hasCompany) $q->where('company_id', $companyId);
-                if ($dateCol) $q->where($dateCol, '>=', $since);
-                return $q;
-            };
-            $faturadoScope = function () use ($scope, $statusCol) {
-                $q = $scope();
-                if ($statusCol) $q->whereIn($statusCol, self::FATURADO);
-                return $q;
-            };
-
-            $faturamento = (float) $faturadoScope()->sum($totalCol);
-            $pedidos = (int) $faturadoScope()->count();
-
-            $cancelados = 0; $canceladoValor = 0.0;
-            if ($statusCol) {
-                $cancelados = (int) $scope()->where($statusCol, 'cancelled')->count();
-                $canceladoValor = (float) $scope()->where($statusCol, 'cancelled')->sum($totalCol);
+            if (!$analytics->schemaReady()) {
+                return $empty;
             }
 
-            $porCanal = [];
-            if ($channelCol) {
-                $porCanal = $faturadoScope()
-                    ->select(DB::raw("$channelCol as canal"), DB::raw("SUM($totalCol) as total"), DB::raw('COUNT(*) as pedidos'))
-                    ->groupBy($channelCol)->orderByDesc('total')->limit(12)->get()
-                    ->map(fn ($r) => ['canal' => $r->canal ?: 'Sem canal', 'total' => (float) $r->total, 'pedidos' => (int) $r->pedidos])->all();
-            }
+            $porRegiaoEstado = $analytics->porRegiaoEstado($companyId, $days);
 
-            $porStatus = [];
-            if ($statusCol) {
-                $porStatus = $scope()
-                    ->select(DB::raw("$statusCol as status"), DB::raw("SUM($totalCol) as total"), DB::raw('COUNT(*) as pedidos'))
-                    ->groupBy($statusCol)->orderByDesc('pedidos')->get()
-                    ->map(fn ($r) => ['status' => $r->status ?: 'indefinido', 'total' => (float) $r->total, 'pedidos' => (int) $r->pedidos])->all();
-            }
-
-            $porDia = [];
-            if ($dateCol) {
-                $porDia = $faturadoScope()
-                    ->select(DB::raw("DATE($dateCol) as dia"), DB::raw("SUM($totalCol) as total"))
-                    ->groupBy(DB::raw("DATE($dateCol)"))->orderBy('dia')->get()
-                    ->map(fn ($r) => ['dia' => $r->dia, 'total' => (float) $r->total])->all();
-            }
-
-            $selRec = ["$keyCol as pedido", "$totalCol as total"];
-            if ($statusCol) $selRec[] = "$statusCol as status";
-            if ($channelCol) $selRec[] = "$channelCol as canal";
-            if ($nameCol) $selRec[] = "$nameCol as cliente";
-            if ($dateCol) $selRec[] = "$dateCol as data";
-            $recentesQ = $scope()->select(DB::raw(implode(', ', $selRec)));
-            if ($dateCol) $recentesQ->orderByDesc($dateCol);
-            $recentes = $recentesQ->limit(40)->get()->map(fn ($r) => [
-                'pedido' => $r->pedido,
-                'cliente' => $r->cliente ?? '—',
-                'canal' => $r->canal ?? '—',
-                'status' => $r->status ?? '—',
-                'total' => (float) $r->total,
-                'data' => isset($r->data) ? (string) $r->data : null,
-            ])->all();
-
-            return [
-                'kpis' => [
-                    'faturamento' => round($faturamento, 2),
-                    'pedidos' => $pedidos,
-                    'ticket' => $pedidos > 0 ? round($faturamento / $pedidos, 2) : 0,
-                    'cancelados' => $cancelados,
-                    'cancelado_valor' => round($canceladoValor, 2),
-                ],
-                'por_canal' => $porCanal,
-                'por_status' => $porStatus,
-                'por_dia' => $porDia,
-                'recentes' => $recentes,
-                'has_data' => $pedidos > 0 || !empty($recentes),
+            $result = [
+                'kpis' => $analytics->kpis($companyId, $days),
+                'por_canal' => $analytics->porCanal($companyId, $days),
+                'por_status' => $analytics->porStatus($companyId, $days),
+                'por_dia' => $analytics->porDia($companyId, $days),
+                'mensal' => $analytics->tendenciaMensal($companyId, 12),
+                'por_regiao_estado' => $porRegiaoEstado,
+                'por_regiao_macro' => $analytics->porRegiaoMacro($porRegiaoEstado),
+                'por_marca' => $analytics->porMarca($companyId, $days),
+                'top_produtos' => $analytics->topProdutos($companyId, $days),
+                'recentes' => $this->recentes($companyId, $days),
             ];
+            $result['has_data'] = $result['kpis']['pedidos'] > 0 || !empty($result['recentes']);
+
+            return $result;
         } catch (\Throwable $e) {
             return $empty;
         }
+    }
+
+    /** Lista de pedidos recentes — mantém a leitura defensiva original (colunas variam por origem). */
+    private function recentes(int $companyId, int $days): array
+    {
+        $cols = Schema::getColumnListing('orders');
+        $has = fn ($c) => in_array($c, $cols, true);
+
+        $totalCol = $has('total_amount') ? 'total_amount' : null;
+        if (!$totalCol) {
+            return [];
+        }
+
+        $statusCol = $has('status') ? 'status' : null;
+        $channelCol = $has('selling_channel') ? 'selling_channel' : null;
+        $dateCol = $has('date_created') ? 'date_created' : ($has('order_date') ? 'order_date' : ($has('created_at') ? 'created_at' : null));
+        $hasMlOrderId = $has('ml_order_id');
+        $buyerNameCol = $has('buyer_nickname') ? 'buyer_nickname' : null;
+        $canJoinCustomers = $has('customer_id') && Schema::hasTable('customers') && Schema::hasColumn('customers', 'name');
+        $hasCompany = $has('company_id');
+        $since = Carbon::now()->subDays($days);
+
+        $q = DB::table('orders as o');
+        if ($canJoinCustomers) {
+            $q->leftJoin('customers as c', 'c.id', '=', 'o.customer_id');
+        }
+        if ($hasCompany) {
+            $q->where('o.company_id', $companyId);
+        }
+        if ($dateCol) {
+            $q->where("o.$dateCol", '>=', $since);
+        }
+
+        // Nº do pedido: prioriza ml_order_id (pedidos vindos da API), cai pro
+        // id interno quando é nulo — comum em pedidos importados via CSV
+        // Magazord/Netshoes, que nunca preenchem esse campo (CLAUDE.md §5.1).
+        // Antes disso, se ml_order_id existisse como coluna mas estivesse
+        // vazio pra esses pedidos, a coluna "Pedido" toda ficava em branco.
+        $keyExpr = $hasMlOrderId ? 'COALESCE(o.ml_order_id, o.id)' : 'o.id';
+        $selRec = ["$keyExpr as pedido", "o.$totalCol as total"];
+        if ($statusCol) {
+            $selRec[] = "o.$statusCol as status";
+        }
+        if ($channelCol) {
+            $selRec[] = "o.$channelCol as canal";
+        }
+        // Nome do cliente: prioriza customers.name (alimentado por qualquer
+        // origem, via customer_id), cai pro buyer_nickname (só Mercado Livre)
+        // quando não há cliente casado.
+        if ($canJoinCustomers && $buyerNameCol) {
+            $selRec[] = "COALESCE(c.name, o.$buyerNameCol) as cliente";
+        } elseif ($canJoinCustomers) {
+            $selRec[] = 'c.name as cliente';
+        } elseif ($buyerNameCol) {
+            $selRec[] = "o.$buyerNameCol as cliente";
+        }
+        if ($dateCol) {
+            $selRec[] = "o.$dateCol as data";
+        }
+
+        $q->select(DB::raw(implode(', ', $selRec)));
+        if ($dateCol) {
+            $q->orderByDesc("o.$dateCol");
+        }
+
+        return $q->limit(40)->get()->map(fn ($r) => [
+            'pedido' => $r->pedido,
+            'cliente' => $r->cliente ?? '—',
+            'canal' => $r->canal ?? '—',
+            'status' => $r->status ?? '—',
+            'total' => (float) $r->total,
+            'data' => isset($r->data) ? (string) $r->data : null,
+        ])->all();
     }
 }
