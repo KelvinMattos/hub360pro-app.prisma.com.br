@@ -1,0 +1,7 @@
+Pedido;Data/Hora;Situação;Canal;SKU;Produto;Quantidade;Valor Unitário;Marca;Categoria Principal
+2001;01/07/2026 10:00:00;Nota Fiscal Emitida;Netshoes;SKU-A;Tênis Teste A;1;100,00;MarcaX;Tênis
+2002;02/07/2026 11:00:00;Transporte;Shopee;SKU-A;Tênis Teste A;2;50,00;MarcaX;Tênis
+2002;02/07/2026 11:00:00;Transporte;Shopee;SKU-B;Tênis Teste B;1;30,00;MarcaY;Calçados
+2003;03/07/2026 12:00:00;Entregue;Mercado Livre;SKU-A;Tênis Teste A;1;100,00;MarcaX;Tênis
+2003;03/07/2026 12:00:00;Entregue;Mercado Livre;SKU-A;Tênis Teste A;1;100,00;MarcaX;Tênis
+2004;04/07/2026 13:00:00;Cancelado Pagamento;Site;SKU-DESCONHECIDO;Produto Sem Cadastro;1;20,00;MarcaZ;Diversos

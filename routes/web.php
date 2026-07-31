@@ -108,9 +108,9 @@ Route::middleware(['auth'])->group(function () {
         // Importações Magazord — alimenta o banco a partir dos modelos exportados pelo Magazord
         Route::prefix('imports/magazord')->name('magazord.')->group(function () {
             Route::get('/{type}', [MagazordImportController::class , 'show'])
-                ->whereIn('type', ['estoque', 'custos', 'precos', 'descontos', 'produtos', 'vendas'])->name('show');
+                ->whereIn('type', ['estoque', 'custos', 'precos', 'descontos', 'produtos', 'vendas', 'vendas_itens'])->name('show');
             Route::post('/{type}', [MagazordImportController::class , 'import'])
-                ->whereIn('type', ['estoque', 'custos', 'precos', 'descontos', 'produtos', 'vendas'])->name('import');
+                ->whereIn('type', ['estoque', 'custos', 'precos', 'descontos', 'produtos', 'vendas', 'vendas_itens'])->name('import');
         });
 
         // Importações Netshoes — só canal (netshoes_*), cruza pelo sku do produto
