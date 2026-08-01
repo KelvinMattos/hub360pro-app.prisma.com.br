@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Netshoes;
 
 use App\Http\Controllers\Controller;
+use App\Models\Customer;
 use App\Models\Product;
 use App\Services\Customers\CustomerIdentityService;
 use Illuminate\Http\Request;
@@ -375,7 +376,41 @@ class NetshoesImportController extends Controller
             return $this->fail($e);
         }
 
+        // Pré-carrega em LOTE quem já existe (pedidos e clientes) em vez de 1
+        // SELECT por pedido dentro do loop de escrita — era o gargalo real de
+        // um arquivo de poucos milhares de pedidos estourar o timeout de
+        // ~100s do Cloudflare (incidente relatado 01/08/2026, Error 524):
+        // ~3-5 queries sequenciais por pedido único (SELECT pedido + SELECT/
+        // UPDATE/INSERT cliente + INSERT/UPDATE pedido), sem nenhuma delas
+        // em lote. Agora é O(poucas dezenas de queries), não O(pedidos).
+        $numeros = array_keys($porPedido);
+        $existingOrderIds = collect();
+        foreach (array_chunk($numeros, 1000) as $chunk) {
+            $q = DB::table('orders')->whereIn($keyCol, $chunk);
+            if ($hasCompany) $q->where('company_id', $companyId);
+            $existingOrderIds = $existingOrderIds->merge($q->pluck($keyCol));
+        }
+        $existingOrderIds = $existingOrderIds->flip();
+
+        $existingCustomersByDoc = collect();
+        if ($customerIdentity) {
+            $docs = collect($porPedido)
+                ->map(fn ($row) => CustomerIdentityService::normalizeDoc($this->col($row, ['CPF/CNPJ do Comprador'])))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+            foreach (array_chunk($docs, 1000) as $chunk) {
+                $existingCustomersByDoc = $existingCustomersByDoc->merge(
+                    Customer::where('company_id', $companyId)->whereIn('doc_number', $chunk)->get()->keyBy('doc_number')
+                );
+            }
+        }
+
         $created = 0; $updated = 0; $skipped = 0;
+        $now = now();
+        $upsertRows = [];
+
         DB::beginTransaction();
         try {
             foreach ($porPedido as $numero => $row) {
@@ -398,31 +433,45 @@ class NetshoesImportController extends Controller
                 if ($dateCol) $payload[$dateCol] = $this->parseDate($this->col($row, ['Data da Compra']));
 
                 // CPF é a chave que une o mesmo cliente entre canais — ver
-                // CustomerIdentityService.
+                // CustomerIdentityService. Resolvido em lote acima quando o
+                // cliente já existe; só cai no findOrCreate individual (mais
+                // caro) pra cliente novo ou sem CPF — a minoria do lote.
                 if ($customerIdentity) {
-                    $customer = $customerIdentity->findOrCreate($companyId, [
-                        'doc_number' => $docRaw, 'name' => $nameRaw, 'origin_channel' => $channelRaw,
-                    ]);
+                    $doc = CustomerIdentityService::normalizeDoc($docRaw);
+                    $customer = $doc ? ($existingCustomersByDoc[$doc] ?? null) : null;
+                    if (!$customer) {
+                        $customer = $customerIdentity->findOrCreate($companyId, [
+                            'doc_number' => $docRaw, 'name' => $nameRaw, 'origin_channel' => $channelRaw,
+                        ]);
+                        if ($customer && $doc) {
+                            $existingCustomersByDoc[$doc] = $customer; // não recria se o CPF repetir no mesmo lote
+                        }
+                    }
                     if ($customer) {
                         $payload['customer_id'] = $customer->id;
                     }
                 }
 
-                $query = DB::table('orders')->where($keyCol, $numero);
-                if ($hasCompany) $query->where('company_id', $companyId);
-                $existing = $query->first();
+                if ($hasCompany) $payload['company_id'] = $companyId;
+                if ($hasTimestamps) { $payload['created_at'] = $now; $payload['updated_at'] = $now; }
 
-                if ($existing) {
-                    if ($hasTimestamps) $payload['updated_at'] = now();
-                    (clone $query)->update($payload);
-                    $updated++;
-                } else {
-                    if ($hasCompany) $payload['company_id'] = $companyId;
-                    if ($hasTimestamps) { $payload['created_at'] = now(); $payload['updated_at'] = now(); }
-                    DB::table('orders')->insert($payload);
-                    $created++;
+                isset($existingOrderIds[$numero]) ? $updated++ : $created++;
+                $upsertRows[] = $payload;
+            }
+
+            if (!empty($upsertRows)) {
+                $updateCols = array_values(array_filter([
+                    $nameCol, $docCol, $channelCol, $payCol, $statusCol, $totalCol, $paidCol, $dateCol,
+                    $hasCustomerId ? 'customer_id' : null,
+                    $hasTimestamps ? 'updated_at' : null,
+                ]));
+                // upsert() exige colunas iguais em todas as linhas do lote — já
+                // garantido acima, os mesmos $xCol valem pro arquivo inteiro.
+                foreach (array_chunk($upsertRows, 500) as $chunk) {
+                    DB::table('orders')->upsert($chunk, [$keyCol], $updateCols);
                 }
             }
+
             DB::commit();
         } catch (\Throwable $e) {
             DB::rollBack();

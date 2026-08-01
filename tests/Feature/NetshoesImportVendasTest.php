@@ -115,6 +115,37 @@ class NetshoesImportVendasTest extends TestCase
      * de pedido não é um caso real, só ocorreria com dado sintético de teste.
      */
 
+    /**
+     * A resolução de cliente por CPF foi reescrita pra lote (pré-carrega os
+     * CPFs do arquivo em 1 query em vez de 1 SELECT por pedido — era o
+     * gargalo real por trás do timeout de ~100s do Cloudflare relatado em
+     * 01/08/2026, Error 524, num arquivo de poucos milhares de pedidos).
+     * Este teste garante que o mesmo CPF em pedidos DIFERENTES ainda
+     * resolve pro MESMO cliente — não duplica por causa do lote.
+     */
+    public function test_import_reuses_same_customer_for_repeated_cpf_across_orders(): void
+    {
+        $user = $this->authenticatedUser();
+        $file = new UploadedFile(
+            base_path('tests/Fixtures/netshoes-vendas-shared-cpf.xlsx'), 'vendas.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true
+        );
+
+        $response = $this->actingAs($user)->post(route('netshoes.import', ['type' => 'vendas']), ['file' => $file]);
+
+        $response->assertRedirect(route('netshoes.show', ['type' => 'vendas']));
+        $response->assertSessionHas('success');
+
+        $this->assertSame(1, DB::table('customers')->where('company_id', $user->company_id)->where('doc_number', '55555555555')->count());
+        $this->assertSame(1, DB::table('customers')->where('company_id', $user->company_id)->where('doc_number', '66666666666')->count());
+
+        $customerId = DB::table('customers')->where('doc_number', '55555555555')->value('id');
+        $order2001 = DB::table('orders')->where('ml_order_id', 2001)->first();
+        $order2002 = DB::table('orders')->where('ml_order_id', 2002)->first();
+        $this->assertSame($customerId, $order2001->customer_id);
+        $this->assertSame($customerId, $order2002->customer_id);
+    }
+
     public function test_import_requires_authentication(): void
     {
         $response = $this->post(route('netshoes.import', ['type' => 'vendas']), ['file' => $this->vendasFile()]);
