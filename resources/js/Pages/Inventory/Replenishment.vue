@@ -127,8 +127,16 @@
                                 <tr v-for="r in rows" :key="r.product_id" class="border-b border-slate-50 hover:bg-slate-50/60">
                                     <td class="py-3 px-4"><input type="checkbox" :value="r.product_id" v-model="selectedArray"></td>
                                     <td class="py-3 px-4">
-                                        <div class="font-semibold text-slate-800 line-clamp-1 max-w-xs">{{ r.title || '—' }}</div>
-                                        <div class="text-xs text-slate-400 font-mono">{{ r.sku || '—' }}<span v-if="r.brand"> · {{ r.brand }}</span></div>
+                                        <button type="button" @click="openSalesModal(r)" :title="r.title || 'Produto sem título'"
+                                            class="text-left font-semibold text-slate-800 hover:text-blue-600 hover:underline line-clamp-1 max-w-xs">
+                                            {{ r.title || '—' }}
+                                        </button>
+                                        <div class="text-xs text-slate-400 font-mono">
+                                            {{ r.sku || '—' }}<span v-if="r.brand"> · {{ r.brand }}</span>
+                                            <span v-if="r.qty_clearance_30 > 0" title="Unidades vendidas em liquidação nos últimos 30d — não contam no giro" class="ml-1 text-amber-500">
+                                                <i class="fa-solid fa-tag"></i> {{ r.qty_clearance_30 }} em liquidação
+                                            </span>
+                                        </div>
                                     </td>
                                     <td class="py-3 px-4"><span :class="['badge', statusBadge(r.status)]">{{ statusLabel(r.status) }}</span></td>
                                     <td class="py-3 px-4 text-right font-mono text-slate-700">{{ n(r.stock) }}</td>
@@ -142,7 +150,14 @@
                                         <span v-if="r.abc_class" :class="['badge', abcBadge(r.abc_class)]">{{ r.abc_class }}</span>
                                         <span v-else class="text-slate-300">—</span>
                                     </td>
-                                    <td class="py-3 px-4 text-right font-mono text-slate-500">{{ n(Math.round(r.priority_score)) }}</td>
+                                    <td class="py-3 px-4" title="Relativo ao SKU mais urgente do catálogo hoje (100% = mais urgente)">
+                                        <div class="flex items-center justify-end gap-2">
+                                            <div class="w-14 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                                                <div class="h-full rounded-full" :class="priorityBarClass(r.priority_pct)" :style="{ width: r.priority_pct + '%' }"></div>
+                                            </div>
+                                            <span class="font-mono text-slate-600 text-xs w-10 text-right">{{ r.priority_pct.toFixed(0) }}%</span>
+                                        </div>
+                                    </td>
                                     <td class="py-3 px-4 text-xs text-slate-500">{{ r.reason }}</td>
                                 </tr>
                                 <tr v-if="!rows.length">
@@ -162,11 +177,89 @@
                 </div>
             </template>
         </div>
+
+        <!-- Modal: histórico de vendas do produto -->
+        <Teleport to="body">
+            <div v-if="salesModal.open" class="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" @click.self="closeSalesModal">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+                    <div class="flex items-start justify-between gap-4 p-5 border-b border-slate-100">
+                        <div class="min-w-0">
+                            <h3 class="font-bold text-slate-900 truncate">{{ salesModal.data?.product?.title || salesModal.title }}</h3>
+                            <p class="text-xs text-slate-400 font-mono">{{ salesModal.data?.product?.sku }}</p>
+                        </div>
+                        <button @click="closeSalesModal" class="text-slate-400 hover:text-slate-700 shrink-0"><i class="fa-solid fa-xmark text-lg"></i></button>
+                    </div>
+
+                    <div v-if="salesModal.loading" class="flex-1 flex items-center justify-center py-16 text-slate-400">
+                        <i class="fa-solid fa-circle-notch fa-spin text-2xl"></i>
+                    </div>
+
+                    <template v-else-if="salesModal.data">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 p-5 border-b border-slate-100 bg-slate-50/50">
+                            <div>
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Unidades vendidas</p>
+                                <p class="text-lg font-black text-slate-900">{{ n(salesModal.data.summary?.total_qty || 0) }}</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Faturamento</p>
+                                <p class="text-lg font-black text-slate-900">{{ money(salesModal.data.summary?.total_revenue) }}</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Lucro (preço − custo)</p>
+                                <p class="text-lg font-black" :class="(salesModal.data.summary?.total_profit || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'">{{ money(salesModal.data.summary?.total_profit) }}</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Margem média</p>
+                                <p class="text-lg font-black text-slate-900">{{ salesModal.data.summary?.avg_margin_pct != null ? salesModal.data.summary.avg_margin_pct.toFixed(1) + '%' : '—' }}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex-1 overflow-y-auto">
+                            <table class="w-full text-sm">
+                                <thead class="sticky top-0 bg-white">
+                                    <tr class="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
+                                        <th class="py-2 px-4 font-bold">Data</th>
+                                        <th class="py-2 px-4 font-bold text-right">Qtd</th>
+                                        <th class="py-2 px-4 font-bold text-right">Preço unit.</th>
+                                        <th class="py-2 px-4 font-bold text-right">Custo unit.</th>
+                                        <th class="py-2 px-4 font-bold text-right">Lucro unit.</th>
+                                        <th class="py-2 px-4 font-bold text-right">Margem</th>
+                                        <th class="py-2 px-4 font-bold">Canal</th>
+                                        <th class="py-2 px-4 font-bold">Situação</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(s, i) in salesModal.data.sales" :key="i" class="border-b border-slate-50">
+                                        <td class="py-2 px-4 text-slate-600 whitespace-nowrap">{{ formatDate(s.date) }}</td>
+                                        <td class="py-2 px-4 text-right font-mono">{{ n(s.quantity) }}</td>
+                                        <td class="py-2 px-4 text-right font-mono">{{ money(s.unit_price) }}</td>
+                                        <td class="py-2 px-4 text-right font-mono text-slate-400">{{ money(s.unit_cost) }}</td>
+                                        <td class="py-2 px-4 text-right font-mono" :class="s.unit_profit >= 0 ? 'text-emerald-600' : 'text-red-600'">{{ money(s.unit_profit) }}</td>
+                                        <td class="py-2 px-4 text-right font-mono text-slate-500">{{ s.margin_pct != null ? s.margin_pct.toFixed(1) + '%' : '—' }}</td>
+                                        <td class="py-2 px-4 text-slate-500">{{ s.channel || '—' }}</td>
+                                        <td class="py-2 px-4">
+                                            <span v-if="s.is_full_price" class="badge b-emerald">Preço cheio</span>
+                                            <span v-else class="badge b-amber" title="Não entrou no cálculo de giro">Liquidação</span>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!salesModal.data.sales.length">
+                                        <td colspan="8" class="py-10 text-center text-slate-400">Nenhuma venda confirmada encontrada pra esse produto.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p v-if="salesModal.data.summary?.truncated" class="text-xs text-slate-400 p-3 border-t border-slate-100">
+                            Mostrando as 200 vendas mais recentes.
+                        </p>
+                    </template>
+                </div>
+            </div>
+        </Teleport>
     </AppLayout>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, reactive, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -215,6 +308,36 @@ const savingSettings = ref(false);
 const recomputing = ref(false);
 const exporting = ref(false);
 const selected = ref(new Set());
+
+const salesModal = reactive({ open: false, loading: false, title: '', data: null });
+
+async function openSalesModal(row) {
+    salesModal.open = true;
+    salesModal.loading = true;
+    salesModal.title = row.title;
+    salesModal.data = null;
+    try {
+        const res = await fetch(route('inventory.planning.sales', row.product_id), {
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+        });
+        salesModal.data = await res.json();
+    } finally {
+        salesModal.loading = false;
+    }
+}
+function closeSalesModal() {
+    salesModal.open = false;
+}
+function priorityBarClass(pct) {
+    if (pct >= 70) return 'bg-red-500';
+    if (pct >= 35) return 'bg-amber-500';
+    return 'bg-slate-300';
+}
+function formatDate(v) {
+    if (!v) return '—';
+    return new Date(v).toLocaleDateString('pt-BR');
+}
 
 const settingsForm = ref({ ...props.settings });
 
@@ -319,7 +442,8 @@ async function exportSelection() {
             'Velocidade (un/dia)': r.velocity_weighted, 'Lead time (dias)': r.lead_time_days,
             'Cobertura (dias)': r.coverage_days, 'Ponto de Reposição': r.reorder_point,
             'Qtd. Sugerida': r.suggested_qty, Status: statusLabel(r.status), ABC: r.abc_class,
-            'Faturamento 30d': r.revenue_30d, 'Receita em Risco 30d': r.revenue_at_risk_30d, Motivo: r.reason,
+            'Faturamento 30d': r.revenue_30d, 'Unid. em liquidação (30d, fora do giro)': r.qty_clearance_30,
+            'Receita em Risco 30d': r.revenue_at_risk_30d, 'Prioridade (%)': r.priority_pct, Motivo: r.reason,
         }));
 
         const sheet = window.XLSX.utils.json_to_sheet(sheetRows);

@@ -2,7 +2,9 @@
 
 namespace Tests\Unit;
 
+use App\Services\ChannelConfigService;
 use App\Services\Inventory\ReplenishmentEngine;
+use App\Services\PricingEngine;
 use Illuminate\Support\Carbon;
 use PHPUnit\Framework\TestCase;
 
@@ -13,7 +15,7 @@ class ReplenishmentEngineTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->engine = new ReplenishmentEngine();
+        $this->engine = new ReplenishmentEngine(new PricingEngine(), new ChannelConfigService());
     }
 
     // --- activeDays ---

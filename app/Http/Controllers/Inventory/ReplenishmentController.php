@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Inventory;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Services\Inventory\ReplenishmentEngine;
+use App\Services\PricingEngine;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -74,11 +76,12 @@ class ReplenishmentController extends Controller
         $sort = in_array($request->get('sort'), self::SORTABLE, true) ? $request->get('sort') : 'priority_score';
         $direction = $request->get('direction') === 'asc' ? 'asc' : 'desc';
 
+        $maxPriority = $this->maxPriorityScore($companyId);
         $rows = $q->orderBy($sort, $direction)
             ->orderBy('id')
             ->forPage($page, $perPage)
             ->get()
-            ->map(fn ($r) => $this->presentRow($r, $settings))
+            ->map(fn ($r) => $this->presentRow($r, $settings, $maxPriority))
             ->all();
 
         return Inertia::render('Inventory/Replenishment', [
@@ -128,13 +131,115 @@ class ReplenishmentController extends Controller
             });
         }
 
+        $maxPriority = $this->maxPriorityScore($companyId);
         $rows = $q->orderByDesc('priority_score')
             ->limit(5000)
             ->get()
-            ->map(fn ($r) => $this->presentRow($r, $settings))
+            ->map(fn ($r) => $this->presentRow($r, $settings, $maxPriority))
             ->all();
 
         return response()->json(['rows' => $rows]);
+    }
+
+    /**
+     * Histórico de vendas do produto pro modal da tela — sempre mostra o preço
+     * real praticado e o custo real do item (`order_items.unit_cost`), nunca o
+     * custo atual do cadastro, e sinaliza quais vendas contaram (ou não) pra
+     * velocidade de reposição (mesmo critério de `ReplenishmentEngine`).
+     */
+    public function sales(Request $request, int $product, ReplenishmentEngine $engine)
+    {
+        $companyId = Auth::user()?->company_id;
+        if (!$companyId) {
+            abort(403);
+        }
+
+        $product = DB::table('products')->where('company_id', $companyId)->where('id', $product)->first();
+        if (!$product) {
+            abort(404);
+        }
+
+        if (!Schema::hasTable('order_items') || !Schema::hasTable('orders')) {
+            return response()->json(['product' => $product, 'sales' => [], 'summary' => null]);
+        }
+
+        $orderCols = Schema::getColumnListing('orders');
+        $dateCol = in_array('date_created', $orderCols, true) ? 'date_created'
+            : (in_array('order_date', $orderCols, true) ? 'order_date'
+            : (in_array('created_at', $orderCols, true) ? 'created_at' : 'created_at'));
+        $hasChannel = in_array('selling_channel', $orderCols, true);
+
+        $select = [
+            'order_items.quantity', 'order_items.unit_price', 'order_items.unit_cost',
+            "orders.$dateCol as odate", 'orders.status',
+        ];
+        if ($hasChannel) {
+            $select[] = 'orders.selling_channel';
+        }
+
+        $sales = DB::table('order_items')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.company_id', $companyId)
+            ->where('order_items.product_id', $product->id)
+            ->whereIn('orders.status', Order::CONFIRMED_STATUSES)
+            ->select($select)
+            ->orderByDesc("orders.$dateCol")
+            ->limit(200)
+            ->get();
+
+        $marginConfig = $engine->healthyMarginConfig($companyId);
+        $pricingEngine = app(PricingEngine::class);
+
+        $totalQty = 0;
+        $totalRevenue = 0.0;
+        $totalProfit = 0.0;
+
+        $items = $sales->map(function ($s) use ($marginConfig, $engine, $pricingEngine, &$totalQty, &$totalRevenue, &$totalProfit) {
+            $qty = (int) $s->quantity;
+            $unitPrice = (float) $s->unit_price;
+            $unitCost = (float) $s->unit_cost;
+            $unitProfit = $unitPrice - $unitCost;
+            $marginPct = $unitPrice > 0 ? round($unitProfit / $unitPrice * 100, 1) : null;
+            $target = $engine->saleTargetPrice($unitCost, $marginConfig);
+            $isFullPrice = $target !== null && $unitPrice >= $target;
+
+            $totalQty += $qty;
+            $totalRevenue += $qty * $unitPrice;
+            $totalProfit += $qty * $unitProfit;
+
+            return [
+                'date' => $s->odate,
+                'quantity' => $qty,
+                'unit_price' => round($unitPrice, 2),
+                'unit_cost' => round($unitCost, 2),
+                'unit_profit' => round($unitProfit, 2),
+                'margin_pct' => $marginPct,
+                'total_price' => round($qty * $unitPrice, 2),
+                'total_profit' => round($qty * $unitProfit, 2),
+                'target_price' => $target !== null ? round($target, 2) : null,
+                'is_full_price' => $isFullPrice,
+                'status' => $s->status,
+                'channel' => $s->selling_channel ?? null,
+            ];
+        })->values();
+
+        return response()->json([
+            'product' => ['id' => $product->id, 'sku' => $product->sku, 'title' => $product->title],
+            'sales' => $items,
+            'summary' => [
+                'total_qty' => $totalQty,
+                'total_revenue' => round($totalRevenue, 2),
+                'total_profit' => round($totalProfit, 2),
+                'avg_margin_pct' => $totalRevenue > 0 ? round($totalProfit / $totalRevenue * 100, 1) : null,
+                'sales_shown' => $items->count(),
+                'truncated' => $items->count() >= 200,
+            ],
+        ]);
+    }
+
+    private function maxPriorityScore(int $companyId): float
+    {
+        return (float) (DB::table('replenishment_plan')->where('company_id', $companyId)->max('priority_score') ?? 0);
     }
 
     /** Salva os parâmetros configuráveis e recalcula na hora (lote síncrono — sem worker de fila confiável no cPanel, CLAUDE.md §6.3). */
@@ -182,7 +287,7 @@ class ReplenishmentController extends Controller
         return back()->with('success', "{$count} SKUs recalculados.");
     }
 
-    private function presentRow(object $r, object $settings): array
+    private function presentRow(object $r, object $settings, float $maxPriority): array
     {
         return [
             'product_id' => $r->product_id,
@@ -204,6 +309,8 @@ class ReplenishmentController extends Controller
             'revenue_at_risk_30d' => (float) $r->revenue_at_risk_30d,
             'immobilized_value' => (float) $r->immobilized_value,
             'priority_score' => (float) $r->priority_score,
+            'priority_pct' => $maxPriority > 0 ? round((float) $r->priority_score / $maxPriority * 100, 1) : 0.0,
+            'qty_clearance_30' => (int) ($r->qty_clearance_30 ?? 0),
             'reason' => $this->reasonFor($r, $settings),
         ];
     }
@@ -212,24 +319,31 @@ class ReplenishmentController extends Controller
     private function reasonFor(object $r, object $settings): string
     {
         $velocity = number_format((float) $r->velocity_weighted, 1, ',', '.');
+        $qtyClearance = (int) ($r->qty_clearance_30 ?? 0);
+        $clearanceOnly = $qtyClearance > 0
+            ? " Só teve {$qtyClearance} un. vendida(s) em liquidação nos últimos 30d — preço abaixo da meta lucro, não conta como giro saudável."
+            : '';
+        $clearanceNote = $qtyClearance > 0
+            ? " ({$qtyClearance} un. vendida(s) em liquidação nos últimos 30d não entraram nesse cálculo — preço abaixo da meta lucro.)"
+            : '';
 
         return match ($r->status) {
             ReplenishmentEngine::STATUS_RUPTURA =>
-                "Sem estoque e vende {$velocity} un/dia — compra urgente.",
+                "Sem estoque e vende {$velocity} un/dia — compra urgente.{$clearanceNote}",
             ReplenishmentEngine::STATUS_DESCONTINUADO =>
-                "Sem estoque e sem venda nos últimos {$settings->dead_stock_days} dias — fora do radar de compra.",
+                "Sem estoque e sem venda a preço saudável nos últimos {$settings->dead_stock_days} dias — fora do radar de compra.{$clearanceOnly}",
             ReplenishmentEngine::STATUS_ESTOQUE_MORTO =>
-                "Tem estoque mas nenhuma venda nos últimos {$settings->dead_stock_days} dias — capital parado, considere liquidar.",
+                "Tem estoque mas nenhuma venda a preço saudável nos últimos {$settings->dead_stock_days} dias — capital parado, considere liquidar.{$clearanceOnly}",
             ReplenishmentEngine::STATUS_EXCESSO =>
-                "Cobre " . number_format((float) $r->coverage_days, 0, ',', '.') . " dias de venda, muito acima do alvo — não comprar.",
+                "Cobre " . number_format((float) $r->coverage_days, 0, ',', '.') . " dias de venda, muito acima do alvo — não comprar.{$clearanceNote}",
             ReplenishmentEngine::STATUS_CRITICO =>
                 "Vende {$velocity} un/dia, cobre " . number_format((float) $r->coverage_days, 0, ',', '.')
-                    . " dias, lead time {$r->lead_time_days} dias — acaba antes de chegar mercadoria nova, comprar {$r->suggested_qty} un.",
+                    . " dias, lead time {$r->lead_time_days} dias — acaba antes de chegar mercadoria nova, comprar {$r->suggested_qty} un.{$clearanceNote}",
             ReplenishmentEngine::STATUS_REPOR =>
                 "Vende {$velocity} un/dia, cobre " . number_format((float) $r->coverage_days, 0, ',', '.')
-                    . " dias, lead time {$r->lead_time_days} dias — comprar {$r->suggested_qty} un.",
+                    . " dias, lead time {$r->lead_time_days} dias — comprar {$r->suggested_qty} un.{$clearanceNote}",
             default =>
-                "Vende {$velocity} un/dia, cobre " . ($r->coverage_days !== null ? number_format((float) $r->coverage_days, 0, ',', '.') . ' dias' : 'período indefinido') . " — dentro do esperado.",
+                "Vende {$velocity} un/dia, cobre " . ($r->coverage_days !== null ? number_format((float) $r->coverage_days, 0, ',', '.') . ' dias' : 'período indefinido') . " — dentro do esperado.{$clearanceNote}",
         };
     }
 

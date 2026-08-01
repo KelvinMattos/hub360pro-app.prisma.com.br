@@ -239,6 +239,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/inventory/planning/export', [ReplenishmentController::class, 'export'])->name('inventory.planning.export');
         Route::post('/inventory/planning/settings', [ReplenishmentController::class, 'updateSettings'])->name('inventory.planning.settings');
         Route::post('/inventory/planning/recompute', [ReplenishmentController::class, 'recompute'])->name('inventory.planning.recompute');
+        Route::get('/inventory/planning/{product}/sales', [ReplenishmentController::class, 'sales'])->name('inventory.planning.sales');
         Route::get('/inventory/aging', [InventoryController::class , 'aging'])->name('inventory.aging');
         // Calculadora ML antiga -> nova calculadora geral de canais
         Route::get('/meli/calculator', fn () => redirect()->route('calculator.index'))->name('meli.calculator');

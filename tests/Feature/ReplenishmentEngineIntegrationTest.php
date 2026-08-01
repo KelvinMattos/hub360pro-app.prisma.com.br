@@ -47,12 +47,18 @@ class ReplenishmentEngineIntegrationTest extends TestCase
         ], $overrides));
     }
 
+    /** Venda a preço cheio por padrão (100/50 — margem saudável, qualifica no motor). */
     private function insertSale(int $productId, Carbon $date, int $qty = 1): void
+    {
+        $this->insertSaleAtPrice($productId, $date, $qty, 100, 50);
+    }
+
+    private function insertSaleAtPrice(int $productId, Carbon $date, int $qty, float $unitPrice, float $unitCost): void
     {
         $orderId = DB::table('orders')->insertGetId([
             'company_id' => $this->companyId,
             'status' => 'approved',
-            'total_amount' => 100 * $qty,
+            'total_amount' => $unitPrice * $qty,
             'date_created' => $date,
             'created_at' => now(),
             'updated_at' => now(),
@@ -62,8 +68,8 @@ class ReplenishmentEngineIntegrationTest extends TestCase
             'product_id' => $productId,
             'sku' => 'x',
             'quantity' => $qty,
-            'unit_price' => 100,
-            'unit_cost' => 50,
+            'unit_price' => $unitPrice,
+            'unit_cost' => $unitCost,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -206,6 +212,42 @@ class ReplenishmentEngineIntegrationTest extends TestCase
 
         $this->assertSame(1, $count);
         $this->assertSame(0, DB::table('replenishment_plan')->where('company_id', $otherCompanyId)->count());
+    }
+
+    /**
+     * Pedido do cliente (01/08/2026): venda de queima (preço colado no custo,
+     * bem abaixo da meta lucro) não pode alimentar giro nem gerar prioridade
+     * de reposição. Custo 50, preço 52 — margem de ~4%, longe da meta (~23%
+     * de markup sobre o equilíbrio ~76 = meta ~94 com a config padrão).
+     */
+    public function test_clearance_priced_sales_do_not_count_towards_velocity(): void
+    {
+        $productId = $this->makeProduct(['stock_quantity' => 0]);
+        $this->insertSaleAtPrice($productId, now()->subDays(2), 10, 52, 50);
+
+        $this->engine->computeCompany($this->companyId);
+
+        $row = DB::table('replenishment_plan')->where('product_id', $productId)->first();
+        $this->assertSame(0.0, (float) $row->velocity_weighted);
+        // Sem giro qualificado e sem estoque: não é RUPTURA (não tem venda "que conte"), é descontinuado.
+        $this->assertSame(ReplenishmentEngine::STATUS_DESCONTINUADO, $row->status);
+        $this->assertSame(10, (int) $row->qty_clearance_30);
+    }
+
+    /** Mistura: só a parte vendida a preço cheio deve aparecer na velocidade. */
+    public function test_mixed_sales_only_full_price_portion_counts_towards_velocity(): void
+    {
+        $productId = $this->makeProduct(['stock_quantity' => 20]);
+        $this->insertSaleAtPrice($productId, now()->subDays(1), 7, 100, 50); // preço cheio, qualifica
+        $this->insertSaleAtPrice($productId, now()->subDays(1), 4, 51, 50);  // queima, não qualifica
+
+        $this->engine->computeCompany($this->companyId);
+
+        $row = DB::table('replenishment_plan')->where('product_id', $productId)->first();
+        // Estoque > 0 => janela cheia de 30d; só as 7 unidades a preço cheio entram no giro.
+        $this->assertEqualsWithDelta(7 / 30, (float) $row->velocity_30, 0.01);
+        $this->assertSame(4, (int) $row->qty_clearance_30);
+        $this->assertGreaterThan(0, (float) $row->velocity_weighted);
     }
 
     public function test_returns_zero_for_company_without_products(): void
