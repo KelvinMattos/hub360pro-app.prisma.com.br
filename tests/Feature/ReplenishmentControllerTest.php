@@ -115,4 +115,103 @@ class ReplenishmentControllerTest extends TestCase
         $response = $this->get(route('inventory.planning'));
         $response->assertRedirect(route('login'));
     }
+
+    /** Pedido do cliente (01/08/2026): prioridade vira % relativo ao SKU mais urgente, não número cru. */
+    public function test_priority_is_exposed_as_percentage_relative_to_max(): void
+    {
+        $urgent = DB::table('products')->insertGetId([
+            'company_id' => $this->companyId, 'sku' => 'URG', 'title' => 'Urgente',
+            'sale_price' => 100, 'cost_price' => 50, 'stock_quantity' => 0,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $orderId = DB::table('orders')->insertGetId([
+            'company_id' => $this->companyId, 'status' => 'approved', 'total_amount' => 500,
+            'date_created' => now()->subDays(1), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('order_items')->insert([
+            'order_id' => $orderId, 'product_id' => $urgent, 'sku' => 'x',
+            'quantity' => 5, 'unit_price' => 100, 'unit_cost' => 50,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('products')->insertGetId([
+            'company_id' => $this->companyId, 'sku' => 'CALM', 'title' => 'Saudável',
+            'sale_price' => 100, 'cost_price' => 50, 'stock_quantity' => 500,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        app(ReplenishmentEngine::class)->computeCompany($this->companyId);
+
+        $response = $this->actingAs($this->user)->get(route('inventory.planning', ['tab' => 'todos']));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('rows.0.priority_pct', 100)
+        );
+        foreach ($response->viewData('page')['props']['rows'] as $row) {
+            $this->assertGreaterThanOrEqual(0, $row['priority_pct']);
+            $this->assertLessThanOrEqual(100, $row['priority_pct']);
+        }
+    }
+
+    public function test_sales_endpoint_returns_history_with_profit_and_full_price_flag(): void
+    {
+        $productId = DB::table('products')->insertGetId([
+            'company_id' => $this->companyId, 'sku' => 'HIST', 'title' => 'Produto Histórico',
+            'sale_price' => 100, 'cost_price' => 50, 'stock_quantity' => 10,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $orderFull = DB::table('orders')->insertGetId([
+            'company_id' => $this->companyId, 'status' => 'approved', 'total_amount' => 100,
+            'date_created' => now()->subDays(3), 'selling_channel' => 'site',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('order_items')->insert([
+            'order_id' => $orderFull, 'product_id' => $productId, 'sku' => 'x',
+            'quantity' => 1, 'unit_price' => 100, 'unit_cost' => 50,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $orderClearance = DB::table('orders')->insertGetId([
+            'company_id' => $this->companyId, 'status' => 'approved', 'total_amount' => 52,
+            'date_created' => now()->subDays(1), 'selling_channel' => 'site',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('order_items')->insert([
+            'order_id' => $orderClearance, 'product_id' => $productId, 'sku' => 'x',
+            'quantity' => 1, 'unit_price' => 52, 'unit_cost' => 50,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)->getJson(route('inventory.planning.sales', $productId));
+
+        $response->assertOk();
+        $data = $response->json();
+        $this->assertSame('HIST', $data['product']['sku']);
+        $this->assertCount(2, $data['sales']);
+        $flags = array_column($data['sales'], 'is_full_price');
+        $this->assertContains(true, $flags);
+        $this->assertContains(false, $flags);
+        $this->assertSame(2, $data['summary']['total_qty']);
+    }
+
+    public function test_sales_endpoint_requires_authentication(): void
+    {
+        $productId = DB::table('products')->insertGetId([
+            'company_id' => $this->companyId, 'sku' => 'X', 'title' => 'X',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->getJson(route('inventory.planning.sales', $productId))->assertStatus(401);
+    }
+
+    public function test_sales_endpoint_blocks_product_from_other_company(): void
+    {
+        $otherCompanyId = DB::table('companies')->insertGetId([
+            'name' => 'Outra', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $productId = DB::table('products')->insertGetId([
+            'company_id' => $otherCompanyId, 'sku' => 'ALHEIO', 'title' => 'De outra empresa',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->actingAs($this->user)->getJson(route('inventory.planning.sales', $productId))->assertStatus(404);
+    }
 }

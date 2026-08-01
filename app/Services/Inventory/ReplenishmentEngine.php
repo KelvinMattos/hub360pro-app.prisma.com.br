@@ -3,6 +3,8 @@
 namespace App\Services\Inventory;
 
 use App\Models\Order;
+use App\Services\ChannelConfigService;
+use App\Services\PricingEngine;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -29,6 +31,22 @@ use Illuminate\Support\Facades\Schema;
  *  2) `purchase_orders` não tem item por produto (só total do pedido) — não
  *     há como calcular "em trânsito" com dado real hoje. Fica sempre 0 na
  *     fórmula de quantidade sugerida, documentado, não inventado.
+ *
+ * Vendas de queima de estoque NÃO alimentam giro nem prioridade (pedido do
+ * cliente, 01/08/2026): uma venda só entra na velocidade quando o preço
+ * praticado (`order_items.unit_price`, real, histórico) ficou na meta lucro
+ * ou acima dela — usando o custo real do item (`unit_cost`) e o motor único
+ * de precificação (PricingEngine::targetPriceFromMarkup(), mesma fórmula do
+ * Cálculo Promo/Centro de Decisão, CLAUDE.md §9). Produto que só vende em
+ * liquidação não deve competir por reposição com o que vende bem a preço
+ * cheio — isso é o objetivo explícito da mudança, não um efeito colateral.
+ *
+ * Limitação documentada (CLAUDE.md §2.4): não há vínculo confiável entre
+ * `orders.selling_channel` (texto livre vindo de cada importador) e
+ * `channel_settings.channel_key` (ex.: 'ml_classico') — por isso os encargos
+ * (comissão) usados aqui são a MÉDIA dos canais ativos da empresa, não o
+ * canal exato daquele pedido. É uma aproximação deliberada em vez de fingir
+ * uma precisão por canal que o dado não sustenta.
  */
 class ReplenishmentEngine
 {
@@ -51,6 +69,12 @@ class ReplenishmentEngine
     ];
 
     private const ABC_MULTIPLIER = ['A' => 3, 'B' => 2, 'C' => 1];
+
+    public function __construct(
+        private PricingEngine $pricingEngine,
+        private ChannelConfigService $channelConfig
+    ) {
+    }
 
     public static function statusLabels(): array
     {
@@ -91,6 +115,35 @@ class ReplenishmentEngine
         return DB::table('replenishment_settings')->where('company_id', $companyId)->first();
     }
 
+    /**
+     * Encargos "médios" da empresa (imposto + MC + comissão média dos canais
+     * ativos) e markup médio — usados pra classificar cada venda histórica
+     * como "preço cheio" ou "queima" (ver docblock da classe). Não é por
+     * canal exato (limitação documentada), é o melhor blend disponível.
+     */
+    public function healthyMarginConfig(int $companyId): array
+    {
+        $cfg = $this->channelConfig->forCompany($companyId);
+        $active = collect($cfg['channels'] ?? [])->filter(fn ($c) => $c['active'] ?? true);
+
+        return [
+            'encargos_pct' => (float) $cfg['imposto'] + (float) $cfg['mc'] + (float) ($active->avg('comissao') ?? 15.0),
+            'markup_pct' => (float) ($active->avg('markup') ?? 23.433),
+        ];
+    }
+
+    /**
+     * Preço-alvo (PV Meta) de uma venda específica, a partir do custo real do
+     * item (`unit_cost`). Null quando não dá pra afirmar nada (sem custo).
+     */
+    public function saleTargetPrice(float $unitCost, array $marginConfig): ?float
+    {
+        if ($unitCost <= 0) {
+            return null;
+        }
+        return $this->pricingEngine->targetPriceFromMarkup($unitCost, $marginConfig['encargos_pct'], $marginConfig['markup_pct']);
+    }
+
     /** Recalcula o plano de reposição inteiro da empresa e grava (upsert) em `replenishment_plan`. */
     public function computeCompany(int $companyId, ?Carbon $now = null): int
     {
@@ -114,7 +167,8 @@ class ReplenishmentEngine
 
         $productIds = $products->pluck('id')->all();
         $deadStockDays = (int) $settings->dead_stock_days;
-        $sales = $this->salesByProduct($companyId, $productIds, $now, $deadStockDays);
+        $marginConfig = $this->healthyMarginConfig($companyId);
+        $sales = $this->salesByProduct($companyId, $productIds, $now, $deadStockDays, $marginConfig);
 
         $revenueByProduct = [];
         foreach ($productIds as $id) {
@@ -198,6 +252,7 @@ class ReplenishmentEngine
                 'revenue_at_risk_30d' => $revenueAtRisk,
                 'immobilized_value' => $immobilized,
                 'priority_score' => $priority,
+                'qty_clearance_30' => (int) $s['qty_clearance_30'],
                 'computed_at' => $now,
                 'updated_at' => $now,
                 'created_at' => $now,
@@ -211,7 +266,7 @@ class ReplenishmentEngine
                 ['sku', 'title', 'brand', 'stock', 'cost_price', 'sale_price', 'velocity_7', 'velocity_30',
                  'velocity_90', 'velocity_weighted', 'demand_stddev', 'lead_time_days', 'safety_stock',
                  'reorder_point', 'coverage_days', 'suggested_qty', 'status', 'abc_class', 'revenue_30d',
-                 'revenue_at_risk_30d', 'immobilized_value', 'priority_score', 'computed_at', 'updated_at']
+                 'revenue_at_risk_30d', 'immobilized_value', 'priority_score', 'qty_clearance_30', 'computed_at', 'updated_at']
             );
         }
 
@@ -219,7 +274,7 @@ class ReplenishmentEngine
     }
 
     /** Vendas confirmadas (Order::CONFIRMED_STATUSES) por produto, usando a data REAL do pedido (CLAUDE.md §5.1). */
-    private function salesByProduct(int $companyId, array $productIds, Carbon $now, int $deadStockDays): array
+    private function salesByProduct(int $companyId, array $productIds, Carbon $now, int $deadStockDays, array $marginConfig): array
     {
         $result = [];
         foreach ($productIds as $id) {
@@ -228,6 +283,7 @@ class ReplenishmentEngine
                 'daily' => [],
                 'last_sale_7' => null, 'last_sale_30' => null, 'last_sale_90' => null,
                 'revenue_30' => 0.0,
+                'qty_clearance_30' => 0,
             ];
         }
 
@@ -262,7 +318,7 @@ class ReplenishmentEngine
             ->where('products.company_id', $companyId)
             ->whereIn('orders.status', Order::CONFIRMED_STATUSES)
             ->where("orders.$dateCol", '>=', $windowStart)
-            ->select('order_items.product_id', "orders.$dateCol as odate", 'order_items.quantity', 'order_items.unit_price')
+            ->select('order_items.product_id', "orders.$dateCol as odate", 'order_items.quantity', 'order_items.unit_price', 'order_items.unit_cost')
             ->get();
 
         foreach ($rows as $r) {
@@ -272,6 +328,23 @@ class ReplenishmentEngine
             $odate = Carbon::parse($r->odate);
             $qty = (int) $r->quantity;
             $bucket = &$result[$r->product_id];
+
+            // Giro só conta venda a preço cheio (>= meta lucro). Queima/liquidação
+            // não alimenta velocidade nem prioridade de reposição (ver docblock da classe).
+            $target = $this->saleTargetPrice((float) $r->unit_cost, $marginConfig);
+            $isFullPrice = $target !== null && (float) $r->unit_price >= $target;
+
+            if (!$isFullPrice) {
+                // Ainda soma no faturamento (revenue_30/ABC continuam refletindo faturamento
+                // real da SKU — decisão deliberada, ver docblock da classe) mas nunca em giro.
+                if ($odate->gte($d30)) {
+                    $bucket['qty_clearance_30'] += $qty;
+                    $bucket['revenue_30'] += $qty * (float) $r->unit_price;
+                }
+                unset($bucket);
+
+                continue;
+            }
 
             if ($odate->gte($dDead)) {
                 $bucket['qty_dead'] += $qty;

@@ -1,4 +1,5 @@
 <template>
+    <Head :title="title ? `${title} · Hub360` : 'Hub360'" />
     <div class="flex h-screen overflow-hidden bg-[#F5F5F7] text-[#1D1D1F] font-sans selection:bg-blue-100 selection:text-blue-900">
         <!-- Sidebar macOS Style -->
         <aside 
@@ -97,9 +98,17 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
-import { Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import NavLink from '@/Components/NavLink.vue';
 
+// `title` não era declarado como prop — o Vue repassava o atributo pro elemento
+// raiz do layout (fallthrough automático), virando um `title="..."` HTML na
+// div que envolve a página inteira. Resultado: passar o mouse em QUALQUER
+// elemento sem `title` próprio mostrava o tooltip da página (relatado pelo
+// cliente em 01/08/2026 na tela de Reposição — "só aparece REPOSIÇÃO
+// INTELIGENTE"). Declarar a prop e usá-la só no <Head> (título da aba do
+// navegador) resolve os dois problemas de uma vez.
+const props = defineProps({ title: { type: String, default: '' } });
 const isSidebarOpen = ref(false);
 const page = usePage();
 const flash = computed(() => page.props.flash || {});
