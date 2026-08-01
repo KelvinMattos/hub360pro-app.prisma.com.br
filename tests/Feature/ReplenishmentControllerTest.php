@@ -161,7 +161,7 @@ class ReplenishmentControllerTest extends TestCase
         ]);
         $orderFull = DB::table('orders')->insertGetId([
             'company_id' => $this->companyId, 'status' => 'approved', 'total_amount' => 100,
-            'date_created' => now()->subDays(3), 'selling_channel' => 'site',
+            'date_created' => now()->subDays(3), 'selling_channel' => 'site', 'ml_order_id' => 'PED-999',
             'created_at' => now(), 'updated_at' => now(),
         ]);
         DB::table('order_items')->insert([
@@ -190,6 +190,61 @@ class ReplenishmentControllerTest extends TestCase
         $this->assertContains(true, $flags);
         $this->assertContains(false, $flags);
         $this->assertSame(2, $data['summary']['total_qty']);
+
+        $fullPriceSale = collect($data['sales'])->firstWhere('order_id', $orderFull);
+        $this->assertSame('PED-999', $fullPriceSale['order_number']);
+        $clearanceSale = collect($data['sales'])->firstWhere('order_id', $orderClearance);
+        $this->assertSame($orderClearance, $clearanceSale['order_number']); // sem ml_order_id, cai no id do pedido
+    }
+
+    public function test_order_endpoint_returns_detail_for_modal(): void
+    {
+        $productId = DB::table('products')->insertGetId([
+            'company_id' => $this->companyId, 'sku' => 'ITEM', 'title' => 'Item do Pedido',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $orderId = DB::table('orders')->insertGetId([
+            'company_id' => $this->companyId, 'status' => 'approved', 'ml_order_id' => 'PED-777',
+            'total_amount' => 150, 'date_created' => now()->subDay(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('order_items')->insert([
+            'order_id' => $orderId, 'product_id' => $productId, 'sku' => 'ITEM',
+            'quantity' => 3, 'unit_price' => 50, 'unit_cost' => 20,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)->getJson(route('inventory.planning.order', $orderId));
+
+        $response->assertOk();
+        $data = $response->json();
+        $this->assertSame('PED-777', $data['order_number']);
+        $this->assertCount(1, $data['items']);
+        $this->assertSame('ITEM', $data['items'][0]['sku']);
+        $this->assertSame(3, $data['items'][0]['quantity']);
+    }
+
+    public function test_order_endpoint_requires_authentication(): void
+    {
+        $orderId = DB::table('orders')->insertGetId([
+            'company_id' => $this->companyId, 'status' => 'approved', 'total_amount' => 0,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->getJson(route('inventory.planning.order', $orderId))->assertStatus(401);
+    }
+
+    public function test_order_endpoint_blocks_order_from_other_company(): void
+    {
+        $otherCompanyId = DB::table('companies')->insertGetId([
+            'name' => 'Outra', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $orderId = DB::table('orders')->insertGetId([
+            'company_id' => $otherCompanyId, 'status' => 'approved', 'total_amount' => 0,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->actingAs($this->user)->getJson(route('inventory.planning.order', $orderId))->assertStatus(404);
     }
 
     public function test_sales_endpoint_requires_authentication(): void

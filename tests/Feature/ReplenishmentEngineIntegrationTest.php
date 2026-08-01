@@ -250,6 +250,39 @@ class ReplenishmentEngineIntegrationTest extends TestCase
         $this->assertGreaterThan(0, (float) $row->velocity_weighted);
     }
 
+    /**
+     * Quando o pedido já tem o encargo REAL (cost_fee_commission/taxes/
+     * shipping/fixed — hoje só ML sincronizado via API), o motor usa esse
+     * valor em vez da média de canais — resposta à pergunta "como ligar o
+     * pedido ao canal exato" (01/08/2026). Encargo real de 50% aqui faz a
+     * meta lucro subir bem acima do preço praticado, mesmo preço/custo que
+     * QUALIFICARIA com a média padrão da empresa (~35%).
+     */
+    public function test_uses_real_order_level_fees_over_company_average_when_available(): void
+    {
+        $productId = $this->makeProduct(['stock_quantity' => 20]);
+        $orderId = DB::table('orders')->insertGetId([
+            'company_id' => $this->companyId, 'status' => 'approved',
+            'total_amount' => 200, // 2 un x 100
+            'cost_fee_commission' => 80, 'cost_fee_taxes' => 20,
+            'cost_fee_shipping' => 0, 'cost_fee_fixed' => 0, // soma = 100 -> encargo real = 50%
+            'date_created' => now()->subDays(1),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('order_items')->insert([
+            'order_id' => $orderId, 'product_id' => $productId, 'sku' => 'x',
+            'quantity' => 2, 'unit_price' => 100, 'unit_cost' => 50,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->engine->computeCompany($this->companyId);
+
+        $row = DB::table('replenishment_plan')->where('product_id', $productId)->first();
+        // Com encargo real de 50%, meta lucro (~123) > preço praticado (100) -> não qualifica.
+        $this->assertSame(0.0, (float) $row->velocity_weighted);
+        $this->assertSame(2, (int) $row->qty_clearance_30);
+    }
+
     public function test_returns_zero_for_company_without_products(): void
     {
         $emptyCompanyId = DB::table('companies')->insertGetId([
