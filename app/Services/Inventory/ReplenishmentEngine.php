@@ -42,11 +42,23 @@ use Illuminate\Support\Facades\Schema;
  * cheio — isso é o objetivo explícito da mudança, não um efeito colateral.
  *
  * Limitação documentada (CLAUDE.md §2.4): não há vínculo confiável entre
- * `orders.selling_channel` (texto livre vindo de cada importador) e
- * `channel_settings.channel_key` (ex.: 'ml_classico') — por isso os encargos
- * (comissão) usados aqui são a MÉDIA dos canais ativos da empresa, não o
- * canal exato daquele pedido. É uma aproximação deliberada em vez de fingir
- * uma precisão por canal que o dado não sustenta.
+ * `orders.selling_channel` (texto livre vindo de cada importador — cada um
+ * grava um vocabulário diferente: MercadoLivreAdapter grava 'marketplace'/
+ * 'mshops', o import Magazord copia literalmente a coluna da planilha, o
+ * Netshoes normaliza case mas ainda é texto livre) e
+ * `channel_settings.channel_key` (ex.: 'ml_classico'). Pior: nem "Mercado
+ * Livre" sozinho resolveria — Clássico (18%) e Premium (26%) têm comissões
+ * bem diferentes e nada no pedido/item hoje registra qual foi usado naquela
+ * venda específica.
+ *
+ * Por isso, em ordem de prioridade: 1) quando o pedido já tem o encargo REAL
+ * gravado (`cost_fee_commission`/`cost_fee_taxes`/`cost_fee_shipping`/
+ * `cost_fee_fixed` — hoje só pedidos sincronizados via API do Mercado Livre,
+ * `OrderSyncService::performDeepSync()`), usa o valor real daquele pedido
+ * (`realEncargosPctForOrder()`); 2) senão, cai na média dos canais ativos da
+ * empresa (`healthyMarginConfig()`) — aproximação deliberada, nunca fingida
+ * como exata. Pedidos vindos de CSV Magazord/Netshoes caem sempre no (2) até
+ * que a planilha de origem traga a taxa/comissão real por venda.
  */
 class ReplenishmentEngine
 {
@@ -135,13 +147,40 @@ class ReplenishmentEngine
     /**
      * Preço-alvo (PV Meta) de uma venda específica, a partir do custo real do
      * item (`unit_cost`). Null quando não dá pra afirmar nada (sem custo).
+     *
+     * `realEncargosPct`, quando informado, substitui a média de canais do
+     * `marginConfig` pelo encargo REAL daquele pedido — ver
+     * `realEncargosPctForOrder()`. Markup (a margem-alvo desejada) continua
+     * sendo o mesmo pra todo mundo: não é um custo incorrido, é política.
      */
-    public function saleTargetPrice(float $unitCost, array $marginConfig): ?float
+    public function saleTargetPrice(float $unitCost, array $marginConfig, ?float $realEncargosPct = null): ?float
     {
         if ($unitCost <= 0) {
             return null;
         }
-        return $this->pricingEngine->targetPriceFromMarkup($unitCost, $marginConfig['encargos_pct'], $marginConfig['markup_pct']);
+        $encargosPct = $realEncargosPct ?? $marginConfig['encargos_pct'];
+
+        return $this->pricingEngine->targetPriceFromMarkup($unitCost, $encargosPct, $marginConfig['markup_pct']);
+    }
+
+    /**
+     * Encargo real de um pedido em %, quando o pedido já tem esse dado (hoje
+     * só pedidos sincronizados via API do Mercado Livre — `OrderSyncService`
+     * grava `cost_fee_commission` de verdade; Magazord/Netshoes CSV nunca
+     * preenchem essas colunas). Null quando não dá pra calcular — cai no
+     * fallback do encargo médio da empresa, nunca inventa um valor.
+     */
+    public function realEncargosPctForOrder(float $totalAmount, float $feeCommission, float $feeTaxes, float $feeShipping, float $feeFixed): ?float
+    {
+        if ($totalAmount <= 0) {
+            return null;
+        }
+        $sumFees = $feeCommission + $feeTaxes + $feeShipping + $feeFixed;
+        if ($sumFees <= 0) {
+            return null;
+        }
+
+        return $sumFees / $totalAmount * 100;
     }
 
     /** Recalcula o plano de reposição inteiro da empresa e grava (upsert) em `replenishment_plan`. */
@@ -299,6 +338,9 @@ class ReplenishmentEngine
             return $result;
         }
 
+        $feeCols = ['total_amount', 'cost_fee_commission', 'cost_fee_taxes', 'cost_fee_shipping', 'cost_fee_fixed'];
+        $hasFeeCols = collect($feeCols)->every(fn ($c) => in_array($c, $orderCols, true));
+
         $maxWindow = max(90, $deadStockDays);
         $windowStart = $now->copy()->subDays($maxWindow)->startOfDay();
         $d7 = $now->copy()->subDays(7)->startOfDay();
@@ -311,6 +353,11 @@ class ReplenishmentEngine
         // erro 1390 "too many placeholders" — bug real reportado em produção). O join com
         // `products` filtrado por company_id já restringe ao tenant certo sem passar lista
         // nenhuma como parâmetro — a query fica O(vendas na janela), não O(SKUs do catálogo).
+        $select = ['order_items.product_id', "orders.$dateCol as odate", 'order_items.quantity', 'order_items.unit_price', 'order_items.unit_cost'];
+        if ($hasFeeCols) {
+            array_push($select, 'orders.total_amount', 'orders.cost_fee_commission', 'orders.cost_fee_taxes', 'orders.cost_fee_shipping', 'orders.cost_fee_fixed');
+        }
+
         $rows = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->join('products', 'products.id', '=', 'order_items.product_id')
@@ -318,7 +365,7 @@ class ReplenishmentEngine
             ->where('products.company_id', $companyId)
             ->whereIn('orders.status', Order::CONFIRMED_STATUSES)
             ->where("orders.$dateCol", '>=', $windowStart)
-            ->select('order_items.product_id', "orders.$dateCol as odate", 'order_items.quantity', 'order_items.unit_price', 'order_items.unit_cost')
+            ->select($select)
             ->get();
 
         foreach ($rows as $r) {
@@ -331,7 +378,13 @@ class ReplenishmentEngine
 
             // Giro só conta venda a preço cheio (>= meta lucro). Queima/liquidação
             // não alimenta velocidade nem prioridade de reposição (ver docblock da classe).
-            $target = $this->saleTargetPrice((float) $r->unit_cost, $marginConfig);
+            // Usa o encargo REAL do pedido quando disponível (hoje só vendas
+            // sincronizadas via API do ML) em vez da média de canais — mais exato.
+            $realEncargosPct = $hasFeeCols ? $this->realEncargosPctForOrder(
+                (float) $r->total_amount, (float) $r->cost_fee_commission,
+                (float) $r->cost_fee_taxes, (float) $r->cost_fee_shipping, (float) $r->cost_fee_fixed
+            ) : null;
+            $target = $this->saleTargetPrice((float) $r->unit_cost, $marginConfig, $realEncargosPct);
             $isFullPrice = $target !== null && (float) $r->unit_price >= $target;
 
             if (!$isFullPrice) {

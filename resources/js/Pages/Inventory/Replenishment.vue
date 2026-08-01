@@ -184,13 +184,69 @@
                 <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
                     <div class="flex items-start justify-between gap-4 p-5 border-b border-slate-100">
                         <div class="min-w-0">
-                            <h3 class="font-bold text-slate-900 truncate">{{ salesModal.data?.product?.title || salesModal.title }}</h3>
-                            <p class="text-xs text-slate-400 font-mono">{{ salesModal.data?.product?.sku }}</p>
+                            <template v-if="salesModal.view === 'order'">
+                                <h3 class="font-bold text-slate-900 truncate">Pedido #{{ salesModal.orderData?.order_number ?? '…' }}</h3>
+                                <p class="text-xs text-slate-400">
+                                    {{ salesModal.orderData ? formatDate(salesModal.orderData.date) : '' }}
+                                    <span v-if="salesModal.orderData?.status_label"> · {{ salesModal.orderData.status_label }}</span>
+                                </p>
+                            </template>
+                            <template v-else>
+                                <h3 class="font-bold text-slate-900 truncate">{{ salesModal.data?.product?.title || salesModal.title }}</h3>
+                                <p class="text-xs text-slate-400 font-mono">{{ salesModal.data?.product?.sku }}</p>
+                            </template>
                         </div>
-                        <button @click="closeSalesModal" class="text-slate-400 hover:text-slate-700 shrink-0"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        <div class="flex items-center gap-3 shrink-0">
+                            <button v-if="salesModal.view === 'order'" @click="backToSalesList" title="Voltar pra lista de vendas" class="text-slate-400 hover:text-slate-700">
+                                <i class="fa-solid fa-arrow-left text-lg"></i>
+                            </button>
+                            <button @click="closeSalesModal" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark text-lg"></i></button>
+                        </div>
                     </div>
 
-                    <div v-if="salesModal.loading" class="flex-1 flex items-center justify-center py-16 text-slate-400">
+                    <!-- Detalhe do pedido -->
+                    <template v-if="salesModal.view === 'order'">
+                        <div v-if="salesModal.orderLoading" class="flex-1 flex items-center justify-center py-16 text-slate-400">
+                            <i class="fa-solid fa-circle-notch fa-spin text-2xl"></i>
+                        </div>
+                        <div v-else-if="salesModal.orderData" class="flex-1 overflow-y-auto p-5 space-y-5">
+                            <div class="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Cliente</p>
+                                    <p class="font-semibold text-slate-800">{{ salesModal.orderData.customer_name || '—' }}</p>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Canal</p>
+                                    <p class="font-semibold text-slate-800">{{ salesModal.orderData.channel || '—' }}</p>
+                                </div>
+                            </div>
+
+                            <div class="border border-slate-100 rounded-xl divide-y divide-slate-50">
+                                <div v-for="(it, i) in salesModal.orderData.items" :key="i" class="p-3 flex justify-between gap-3 text-sm">
+                                    <div class="min-w-0">
+                                        <p class="font-semibold text-slate-800 truncate">{{ it.title }}</p>
+                                        <p class="text-xs text-slate-400 font-mono">{{ it.sku }} · qtd {{ it.quantity }}</p>
+                                    </div>
+                                    <div class="text-right font-mono shrink-0">{{ money(it.unit_price) }}</div>
+                                </div>
+                                <div v-if="!salesModal.orderData.items.length" class="p-4 text-center text-slate-400 text-sm">Sem itens.</div>
+                            </div>
+
+                            <div class="bg-slate-50 rounded-xl p-4 space-y-1.5 text-sm font-mono">
+                                <div class="flex justify-between"><span class="text-slate-500">Faturamento</span><span>{{ money(salesModal.orderData.total_amount) }}</span></div>
+                                <div class="flex justify-between text-red-500"><span>(-) Comissão</span><span>{{ money(salesModal.orderData.cost_fee_commission) }}</span></div>
+                                <div class="flex justify-between text-red-500"><span>(-) Impostos</span><span>{{ money(salesModal.orderData.cost_fee_taxes) }}</span></div>
+                                <div class="flex justify-between text-red-500"><span>(-) Frete</span><span>{{ money(salesModal.orderData.cost_fee_shipping) }}</span></div>
+                                <div class="flex justify-between text-red-500"><span>(-) Taxa fixa</span><span>{{ money(salesModal.orderData.cost_fee_fixed) }}</span></div>
+                                <div class="flex justify-between text-red-500"><span>(-) CMV</span><span>{{ money(salesModal.orderData.cost_products) }}</span></div>
+                                <div class="flex justify-between font-bold pt-1.5 border-t border-slate-200" :class="salesModal.orderData.net_profit >= 0 ? 'text-emerald-600' : 'text-red-600'">
+                                    <span>Lucro líquido</span><span>{{ money(salesModal.orderData.net_profit) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div v-else-if="salesModal.loading" class="flex-1 flex items-center justify-center py-16 text-slate-400">
                         <i class="fa-solid fa-circle-notch fa-spin text-2xl"></i>
                     </div>
 
@@ -218,6 +274,7 @@
                             <table class="w-full text-sm">
                                 <thead class="sticky top-0 bg-white">
                                     <tr class="text-left text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
+                                        <th class="py-2 px-4 font-bold">Pedido</th>
                                         <th class="py-2 px-4 font-bold">Data</th>
                                         <th class="py-2 px-4 font-bold text-right">Qtd</th>
                                         <th class="py-2 px-4 font-bold text-right">Preço unit.</th>
@@ -230,6 +287,11 @@
                                 </thead>
                                 <tbody>
                                     <tr v-for="(s, i) in salesModal.data.sales" :key="i" class="border-b border-slate-50">
+                                        <td class="py-2 px-4">
+                                            <button type="button" @click="openOrderDetail(s.order_id)" class="font-mono text-blue-600 hover:underline">
+                                                #{{ s.order_number }}
+                                            </button>
+                                        </td>
                                         <td class="py-2 px-4 text-slate-600 whitespace-nowrap">{{ formatDate(s.date) }}</td>
                                         <td class="py-2 px-4 text-right font-mono">{{ n(s.quantity) }}</td>
                                         <td class="py-2 px-4 text-right font-mono">{{ money(s.unit_price) }}</td>
@@ -243,7 +305,7 @@
                                         </td>
                                     </tr>
                                     <tr v-if="!salesModal.data.sales.length">
-                                        <td colspan="8" class="py-10 text-center text-slate-400">Nenhuma venda confirmada encontrada pra esse produto.</td>
+                                        <td colspan="9" class="py-10 text-center text-slate-400">Nenhuma venda confirmada encontrada pra esse produto.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -309,13 +371,18 @@ const recomputing = ref(false);
 const exporting = ref(false);
 const selected = ref(new Set());
 
-const salesModal = reactive({ open: false, loading: false, title: '', data: null });
+const salesModal = reactive({
+    open: false, loading: false, title: '', data: null,
+    view: 'sales', orderLoading: false, orderData: null,
+});
 
 async function openSalesModal(row) {
     salesModal.open = true;
+    salesModal.view = 'sales';
     salesModal.loading = true;
     salesModal.title = row.title;
     salesModal.data = null;
+    salesModal.orderData = null;
     try {
         const res = await fetch(route('inventory.planning.sales', row.product_id), {
             headers: { Accept: 'application/json' },
@@ -328,6 +395,23 @@ async function openSalesModal(row) {
 }
 function closeSalesModal() {
     salesModal.open = false;
+}
+async function openOrderDetail(orderId) {
+    salesModal.view = 'order';
+    salesModal.orderLoading = true;
+    salesModal.orderData = null;
+    try {
+        const res = await fetch(route('inventory.planning.order', orderId), {
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+        });
+        salesModal.orderData = await res.json();
+    } finally {
+        salesModal.orderLoading = false;
+    }
+}
+function backToSalesList() {
+    salesModal.view = 'sales';
 }
 function priorityBarClass(pct) {
     if (pct >= 70) return 'bg-red-500';

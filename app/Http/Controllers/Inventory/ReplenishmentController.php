@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Inventory;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Services\Inventory\ReplenishmentEngine;
-use App\Services\PricingEngine;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -168,13 +167,25 @@ class ReplenishmentController extends Controller
             : (in_array('order_date', $orderCols, true) ? 'order_date'
             : (in_array('created_at', $orderCols, true) ? 'created_at' : 'created_at'));
         $hasChannel = in_array('selling_channel', $orderCols, true);
+        // `external_id` está no $fillable do model Order mas não existe na tabela real
+        // (bug pré-existente documentado em OrderSyncService.php) — `ml_order_id` é a
+        // coluna que de fato existe. Mesmo padrão de fallback já usado no import Magazord.
+        $orderNumberCol = collect(['external_id', 'ml_order_id'])->first(fn ($c) => in_array($c, $orderCols, true));
+        $feeCols = ['total_amount', 'cost_fee_commission', 'cost_fee_taxes', 'cost_fee_shipping', 'cost_fee_fixed'];
+        $hasFeeCols = collect($feeCols)->every(fn ($c) => in_array($c, $orderCols, true));
 
         $select = [
             'order_items.quantity', 'order_items.unit_price', 'order_items.unit_cost',
-            "orders.$dateCol as odate", 'orders.status',
+            "orders.$dateCol as odate", 'orders.status', 'orders.id as order_id',
         ];
         if ($hasChannel) {
             $select[] = 'orders.selling_channel';
+        }
+        if ($orderNumberCol) {
+            $select[] = "orders.$orderNumberCol as order_number_col";
+        }
+        if ($hasFeeCols) {
+            array_push($select, 'orders.total_amount', 'orders.cost_fee_commission', 'orders.cost_fee_taxes', 'orders.cost_fee_shipping', 'orders.cost_fee_fixed');
         }
 
         $sales = DB::table('order_items')
@@ -188,19 +199,25 @@ class ReplenishmentController extends Controller
             ->get();
 
         $marginConfig = $engine->healthyMarginConfig($companyId);
-        $pricingEngine = app(PricingEngine::class);
 
         $totalQty = 0;
         $totalRevenue = 0.0;
         $totalProfit = 0.0;
 
-        $items = $sales->map(function ($s) use ($marginConfig, $engine, $pricingEngine, &$totalQty, &$totalRevenue, &$totalProfit) {
+        $items = $sales->map(function ($s) use ($marginConfig, $engine, &$totalQty, &$totalRevenue, &$totalProfit) {
             $qty = (int) $s->quantity;
             $unitPrice = (float) $s->unit_price;
             $unitCost = (float) $s->unit_cost;
             $unitProfit = $unitPrice - $unitCost;
             $marginPct = $unitPrice > 0 ? round($unitProfit / $unitPrice * 100, 1) : null;
-            $target = $engine->saleTargetPrice($unitCost, $marginConfig);
+
+            // Mesmo critério do motor (real do pedido > média da empresa) — pra
+            // não mostrar "preço cheio" aqui e o motor ter decidido diferente.
+            $realEncargosPct = isset($s->total_amount) ? $engine->realEncargosPctForOrder(
+                (float) $s->total_amount, (float) $s->cost_fee_commission,
+                (float) $s->cost_fee_taxes, (float) $s->cost_fee_shipping, (float) $s->cost_fee_fixed
+            ) : null;
+            $target = $engine->saleTargetPrice($unitCost, $marginConfig, $realEncargosPct);
             $isFullPrice = $target !== null && $unitPrice >= $target;
 
             $totalQty += $qty;
@@ -220,6 +237,8 @@ class ReplenishmentController extends Controller
                 'is_full_price' => $isFullPrice,
                 'status' => $s->status,
                 'channel' => $s->selling_channel ?? null,
+                'order_id' => $s->order_id,
+                'order_number' => ($s->order_number_col ?? null) ?: $s->order_id,
             ];
         })->values();
 
@@ -234,6 +253,53 @@ class ReplenishmentController extends Controller
                 'sales_shown' => $items->count(),
                 'truncated' => $items->count() >= 200,
             ],
+        ]);
+    }
+
+    /** Detalhe do pedido pro modal (link "número do pedido" no histórico de vendas). */
+    public function order(Request $request, int $order)
+    {
+        $companyId = Auth::user()?->company_id;
+        if (!$companyId) {
+            abort(403);
+        }
+
+        $order = Order::where('company_id', $companyId)->with('items')->find($order);
+        if (!$order) {
+            abort(404);
+        }
+
+        $items = $order->getRelation('items'); // orders.items é uma coluna JSON legada que colide com a relação — nunca usar $order->items aqui.
+
+        // `external_id` está no $fillable do model mas não existe na tabela real (bug
+        // pré-existente em OrderSyncService.php) — `$order->external_id` sempre voltaria
+        // null. `ml_order_id` é a coluna que de fato existe hoje.
+        $orderNumber = $order->ml_order_id ?: ($order->external_id ?: $order->id);
+
+        return response()->json([
+            'id' => $order->id,
+            'order_number' => $orderNumber,
+            'date' => $order->date_created,
+            'status' => $order->status,
+            'status_label' => $order->status_label,
+            'channel' => $order->selling_channel,
+            'customer_name' => $order->safe_billing_name,
+            'doc' => trim(($order->safe_doc_type ?? '') . ': ' . ($order->safe_doc_number ?? '')),
+            'total_amount' => (float) $order->total_amount,
+            'cost_products' => (float) $order->cost_products,
+            'cost_fee_commission' => (float) $order->cost_fee_commission,
+            'cost_fee_taxes' => (float) $order->cost_fee_taxes,
+            'cost_fee_shipping' => (float) $order->cost_fee_shipping,
+            'cost_fee_fixed' => (float) $order->cost_fee_fixed,
+            'contribution_margin' => (float) $order->contribution_margin,
+            'net_profit' => (float) $order->net_profit,
+            'items' => $items->map(fn ($i) => [
+                'title' => $i->title,
+                'sku' => $i->sku,
+                'quantity' => (int) $i->quantity,
+                'unit_price' => (float) $i->unit_price,
+                'unit_cost' => (float) $i->unit_cost,
+            ])->values(),
         ]);
     }
 
