@@ -1,8 +1,8 @@
 <template>
-    <AppLayout>
+    <AppLayout title="Central de Vendas">
         <div class="p-6 lg:p-8 max-w-[1500px] mx-auto">
             <!-- Header -->
-            <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+            <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <h1 class="text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
                         <i class="fa-solid fa-chart-simple text-teal-500"></i>
@@ -10,11 +10,41 @@
                     </h1>
                     <p class="text-slate-500 mt-2 font-medium">Faturamento por mês, canal, região e produto — tudo sobre os pedidos importados.</p>
                 </div>
-                <div class="flex gap-1 bg-white border border-slate-200 rounded-lg p-1">
+            </div>
+
+            <!-- Filtro de período -->
+            <div class="mb-8 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-wrap items-center gap-3">
+                <div class="flex gap-1 bg-slate-50 border border-slate-200 rounded-lg p-1">
                     <button v-for="d in [7, 30, 90, 365]" :key="d" @click="setDays(d)"
-                        :class="['px-3 py-1.5 rounded-md text-sm font-semibold transition', days === d ? 'bg-teal-500 text-white' : 'text-slate-500 hover:bg-slate-50']">
+                        :class="['px-3 py-1.5 rounded-md text-sm font-semibold transition', periodMode === 'days' && days === d ? 'bg-teal-500 text-white' : 'text-slate-500 hover:bg-slate-100']">
                         {{ d === 365 ? '1 ano' : d + 'd' }}
                     </button>
+                </div>
+
+                <div class="h-6 w-px bg-slate-200"></div>
+
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wide">Mês</label>
+                    <input type="month" v-model="monthInput" @change="setMonth"
+                        :class="['text-sm border rounded-lg px-2 py-1.5 outline-none focus:border-teal-400', periodMode === 'month' ? 'border-teal-400 bg-teal-50/50' : 'border-slate-200']">
+                </div>
+
+                <div class="h-6 w-px bg-slate-200"></div>
+
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wide">De</label>
+                    <input type="date" v-model="fromInput" :class="['text-sm border rounded-lg px-2 py-1.5 outline-none focus:border-teal-400', periodMode === 'range' ? 'border-teal-400 bg-teal-50/50' : 'border-slate-200']">
+                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wide">até</label>
+                    <input type="date" v-model="toInput" :class="['text-sm border rounded-lg px-2 py-1.5 outline-none focus:border-teal-400', periodMode === 'range' ? 'border-teal-400 bg-teal-50/50' : 'border-slate-200']">
+                    <button @click="setRange" :disabled="!fromInput || !toInput"
+                        class="text-sm font-semibold px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                        Aplicar
+                    </button>
+                </div>
+
+                <div class="flex-1"></div>
+                <div v-if="periodLabel" class="text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-100 rounded-lg px-3 py-1.5">
+                    <i class="fa-solid fa-calendar-check mr-1"></i>{{ periodLabel }}
                 </div>
             </div>
 
@@ -24,7 +54,7 @@
             </div>
 
             <!-- KPIs -->
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
                 <div class="kpi">
                     <div class="kpi-l">Faturamento</div>
                     <div class="kpi-v text-emerald-600">{{ money(kpis.faturamento) }}</div>
@@ -36,7 +66,17 @@
                 </div>
                 <div class="kpi"><div class="kpi-l">Pedidos faturados</div><div class="kpi-v">{{ n(kpis.pedidos) }}</div></div>
                 <div class="kpi"><div class="kpi-l">Ticket médio</div><div class="kpi-v">{{ money(kpis.ticket) }}</div></div>
-                <div class="kpi kpi-warn"><div class="kpi-l">Cancelados</div><div class="kpi-v text-red-600">{{ n(kpis.cancelados) }}</div><div class="kpi-s">{{ money(kpis.cancelado_valor) }}</div></div>
+                <div class="kpi kpi-warn">
+                    <div class="kpi-l">Cancelados</div>
+                    <div class="kpi-v text-red-600">{{ n(kpis.cancelados) }}</div>
+                    <div class="kpi-s">{{ money(kpis.cancelado_valor) }} · {{ kpis.taxa_cancelamento_pct }}% dos pedidos</div>
+                </div>
+                <div class="kpi"><div class="kpi-l">Clientes no período</div><div class="kpi-v">{{ n(clientes_resumo.total_clientes) }}</div></div>
+                <div class="kpi" :class="clientes_resumo.multicanal > 0 ? 'kpi-info' : ''">
+                    <div class="kpi-l">Clientes multicanal</div>
+                    <div class="kpi-v" :class="clientes_resumo.multicanal > 0 ? 'text-indigo-600' : ''">{{ n(clientes_resumo.multicanal) }}</div>
+                    <div class="kpi-s">compraram em 2+ canais</div>
+                </div>
             </div>
 
             <!-- Tendência mensal -->
@@ -107,13 +147,24 @@
                     </h3>
                     <div v-if="!top_produtos.length" class="text-slate-400 text-sm py-4 text-center">Sem itens de pedido no período.</div>
                     <table v-else class="w-full text-sm">
+                        <thead>
+                            <tr class="text-[10px] uppercase tracking-wide text-slate-400">
+                                <th class="text-left pb-2 font-bold">Produto</th>
+                                <th class="text-right pb-2 font-bold">Pedidos</th>
+                                <th class="text-right pb-2 font-bold">Unid.</th>
+                                <th class="text-right pb-2 font-bold">Preço médio</th>
+                                <th class="text-right pb-2 font-bold">Total</th>
+                            </tr>
+                        </thead>
                         <tbody>
                             <tr v-for="p in top_produtos" :key="p.sku" class="border-b border-slate-100">
-                                <td class="py-2 pr-2 max-w-[220px]">
+                                <td class="py-2 pr-2 max-w-[200px]">
                                     <p class="font-semibold text-slate-700 truncate" :title="p.titulo">{{ p.titulo }}</p>
                                     <p class="text-[10px] text-slate-400 font-mono">{{ p.sku || '—' }}</p>
                                 </td>
+                                <td class="py-2 text-right font-mono text-slate-400 whitespace-nowrap">{{ n(p.pedidos) }}</td>
                                 <td class="py-2 text-right font-mono text-slate-500 whitespace-nowrap">{{ n(p.unidades) }} un.</td>
+                                <td class="py-2 text-right font-mono text-slate-500 whitespace-nowrap">{{ money(p.preco_medio) }}</td>
                                 <td class="py-2 pl-3 text-right font-mono font-semibold text-slate-700 whitespace-nowrap">{{ money(p.total) }}</td>
                             </tr>
                         </tbody>
@@ -135,6 +186,49 @@
                 </div>
             </div>
 
+            <!-- Top clientes -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-6">
+                <h3 class="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-4">
+                    <i class="fa-solid fa-users mr-1.5"></i>Top 10 clientes
+                    <span class="normal-case font-medium text-slate-400 tracking-normal">— agrupado por CPF/CNPJ, independente do canal</span>
+                </h3>
+                <div v-if="!top_clientes.length" class="text-slate-400 text-sm py-4 text-center">Sem dado de CPF/CNPJ vinculado aos pedidos no período.</div>
+                <div v-else class="overflow-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-[10px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
+                                <th class="text-left py-2 font-bold">Cliente</th>
+                                <th class="text-left py-2 font-bold">Canais</th>
+                                <th class="text-right py-2 font-bold">Pedidos</th>
+                                <th class="text-right py-2 font-bold">Ticket médio</th>
+                                <th class="text-right py-2 font-bold">Total gasto</th>
+                                <th class="text-right py-2 font-bold">Última compra</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="c in top_clientes" :key="c.doc" class="border-b border-slate-100" :class="c.multicanal ? 'bg-indigo-50/40' : ''">
+                                <td class="py-2 pr-2 max-w-[200px]">
+                                    <Link :href="route('customers.show', c.doc)" class="font-semibold text-blue-600 hover:underline truncate block" :title="c.nome">{{ c.nome }}</Link>
+                                    <p class="text-[10px] text-slate-400 font-mono">{{ c.doc }}</p>
+                                </td>
+                                <td class="py-2 pr-2">
+                                    <div class="flex flex-wrap gap-1">
+                                        <span v-for="canal in c.canais" :key="canal" class="pill pill-idle">{{ canal }}</span>
+                                        <span v-if="c.multicanal" class="pill pill-indigo" title="Comprou em mais de um canal">
+                                            <i class="fa-solid fa-shuffle mr-1"></i>Multicanal
+                                        </span>
+                                    </div>
+                                </td>
+                                <td class="py-2 text-right font-mono text-slate-500 whitespace-nowrap">{{ n(c.pedidos) }}</td>
+                                <td class="py-2 text-right font-mono text-slate-500 whitespace-nowrap">{{ money(c.ticket_medio) }}</td>
+                                <td class="py-2 text-right font-mono font-semibold text-slate-700 whitespace-nowrap">{{ money(c.total) }}</td>
+                                <td class="py-2 text-right text-slate-400 whitespace-nowrap">{{ fmtDateTime(c.ultima_compra) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Recentes -->
             <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                 <h3 class="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-4">Pedidos recentes</h3>
@@ -148,7 +242,10 @@
                         </thead>
                         <tbody>
                             <tr v-for="r in recentes" :key="r.pedido" class="border-t border-slate-100 hover:bg-slate-50/60">
-                                <td class="td-l font-mono">{{ r.pedido }}</td>
+                                <td class="td-l font-mono">
+                                    <Link v-if="$page.props.features?.orders" :href="route('orders.show', r.id)" class="text-blue-600 hover:underline">{{ r.pedido }}</Link>
+                                    <span v-else>{{ r.pedido }}</span>
+                                </td>
                                 <td class="td-l max-w-[220px] truncate" :title="r.cliente">
                                     <Link v-if="r.doc" :href="route('customers.show', r.doc)" class="text-blue-600 hover:underline font-semibold">{{ r.cliente }}</Link>
                                     <span v-else>{{ r.cliente }}</span>
@@ -167,7 +264,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import BarList from '@/Components/Sales/BarList.vue';
@@ -175,6 +272,7 @@ import MonthlyTrendChart from '@/Components/Sales/MonthlyTrendChart.vue';
 
 const props = defineProps({
     days: { type: Number, default: 30 },
+    filters: { type: Object, default: () => ({ mode: 'days' }) },
     kpis: { type: Object, default: () => ({}) },
     por_canal: { type: Array, default: () => [] },
     por_status: { type: Array, default: () => [] },
@@ -184,13 +282,45 @@ const props = defineProps({
     por_regiao_macro: { type: Array, default: () => [] },
     por_marca: { type: Array, default: () => [] },
     top_produtos: { type: Array, default: () => [] },
+    top_clientes: { type: Array, default: () => [] },
+    clientes_resumo: { type: Object, default: () => ({ total_clientes: 0, multicanal: 0 }) },
     recentes: { type: Array, default: () => [] },
     has_data: { type: Boolean, default: false },
 });
 
 const maxDia = computed(() => Math.max(1, ...props.por_dia.map(d => d.total || 0)));
 
-function setDays(d) { router.get(route('sales.index'), { days: d }, { preserveScroll: true, preserveState: false }); }
+const periodMode = computed(() => props.filters?.mode || 'days');
+const periodLabel = computed(() => {
+    if (periodMode.value === 'month') return `Mês: ${monthLabel(props.filters.month)}`;
+    if (periodMode.value === 'range') return `${fmtDate(props.filters.from)} até ${fmtDate(props.filters.to)}`;
+    return '';
+});
+function monthLabel(ym) {
+    if (!ym) return '';
+    const [y, m] = ym.split('-');
+    const nomes = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    return `${nomes[parseInt(m, 10) - 1]}/${y}`;
+}
+
+const monthInput = ref(periodMode.value === 'month' ? props.filters.month : '');
+const fromInput = ref(periodMode.value === 'range' ? props.filters.from : '');
+const toInput = ref(periodMode.value === 'range' ? props.filters.to : '');
+
+function setDays(d) {
+    monthInput.value = ''; fromInput.value = ''; toInput.value = '';
+    router.get(route('sales.index'), { days: d }, { preserveScroll: true, preserveState: false });
+}
+function setMonth() {
+    if (!monthInput.value) return;
+    fromInput.value = ''; toInput.value = '';
+    router.get(route('sales.index'), { month: monthInput.value }, { preserveScroll: true, preserveState: false });
+}
+function setRange() {
+    if (!fromInput.value || !toInput.value) return;
+    monthInput.value = '';
+    router.get(route('sales.index'), { from: fromInput.value, to: toInput.value }, { preserveScroll: true, preserveState: false });
+}
 function barH(v) { return Math.max(2, Math.round((v / maxDia.value) * 100)); }
 function n(v) { return (v ?? 0).toLocaleString('pt-BR'); }
 function money(v) { return v == null ? 'R$ 0,00' : 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -209,6 +339,7 @@ function statusClass(s) { return STATUS[s]?.[1] || 'pill-idle'; }
 <style scoped>
 .kpi { @apply bg-white border border-slate-200 rounded-2xl px-5 py-4 shadow-sm; }
 .kpi-warn { @apply border-amber-200 bg-amber-50/40; }
+.kpi-info { @apply border-indigo-200 bg-indigo-50/40; }
 .kpi-l { @apply text-slate-400 text-[11px] uppercase tracking-wide; }
 .kpi-v { @apply font-mono text-xl font-bold text-slate-900 mt-1; }
 .kpi-s { @apply text-slate-400 text-[10px] mt-0.5 font-mono; }
@@ -221,4 +352,5 @@ function statusClass(s) { return STATUS[s]?.[1] || 'pill-idle'; }
 .pill-blue { @apply bg-blue-100 text-blue-700; }
 .pill-red { @apply bg-red-100 text-red-700; }
 .pill-idle { @apply bg-slate-100 text-slate-500; }
+.pill-indigo { @apply bg-indigo-100 text-indigo-700; }
 </style>

@@ -153,6 +153,114 @@ class SalesControllerTest extends TestCase
         $response->assertInertia(fn (Assert $page) => $page->where('recentes.0.doc', null));
     }
 
+    /** Pedido recente inclui o `id` interno do pedido, pra "Pedido" virar link pro detalhe da venda. */
+    public function test_recentes_includes_order_id_for_link_to_order_detail(): void
+    {
+        $orderId = DB::table('orders')->insertGetId([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 100,
+            'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('sales.index'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page->where('recentes.0.id', $orderId));
+    }
+
+    /** Range personalizado (from/to) filtra por date_created, não por "hoje - N dias". */
+    public function test_index_accepts_custom_date_range(): void
+    {
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 500,
+            'date_created' => '2026-03-15', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        // Fora do range pedido — não pode entrar no faturamento.
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 999,
+            'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('sales.index', ['from' => '2026-03-01', 'to' => '2026-03-31']));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('kpis.faturamento', 500)
+            ->where('filters.mode', 'range')
+        );
+    }
+
+    /** Filtro por mês específico (Y-m) cobre o mês inteiro. */
+    public function test_index_accepts_month_filter(): void
+    {
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 300,
+            'date_created' => '2026-02-10', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 700,
+            'date_created' => '2026-03-01', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('sales.index', ['month' => '2026-02']));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->where('kpis.faturamento', 300)
+            ->where('filters.mode', 'month')
+            ->where('filters.month', '2026-02')
+        );
+    }
+
+    /** Data inválida na URL não quebra a página — cai pro modo `days` normal. */
+    public function test_index_falls_back_to_days_mode_on_invalid_range(): void
+    {
+        $response = $this->actingAs($this->user)->get(route('sales.index', ['from' => 'not-a-date', 'to' => 'also-not']));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page->where('filters.mode', 'days'));
+    }
+
+    /**
+     * Pedido explícito do cliente (01/08/2026): "sempre relacione os pedidos
+     * pelo CPF... caso ele tenha comprado em mais de um canal, preciso saber
+     * disso." top_clientes marca multicanal=true e lista os canais; o resumo
+     * conta quantos clientes do período são multicanal.
+     */
+    public function test_top_clientes_flags_multichannel_customer_by_shared_cpf(): void
+    {
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 100,
+            'customer_doc' => '222.222.222-22', 'customer_name' => 'Cliente Multicanal',
+            'selling_channel' => 'mercadolivre', 'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 200,
+            'billing_doc_number' => '222.222.222-22', 'customer_name' => 'Cliente Multicanal',
+            'selling_channel' => 'shopee', 'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 50,
+            'customer_doc' => '333.333.333-33', 'customer_name' => 'Cliente Único',
+            'selling_channel' => 'shopee', 'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('sales.index'));
+
+        $response->assertOk();
+        $data = $response->viewData('page')['props'];
+
+        $multicanal = collect($data['top_clientes'])->firstWhere('doc', '22222222222');
+        $unico = collect($data['top_clientes'])->firstWhere('doc', '33333333333');
+
+        $this->assertTrue($multicanal['multicanal']);
+        $this->assertSame(300.0, $multicanal['total']);
+        $this->assertCount(2, $multicanal['canais']);
+        $this->assertFalse($unico['multicanal']);
+
+        $this->assertSame(2, $data['clientes_resumo']['total_clientes']);
+        $this->assertSame(1, $data['clientes_resumo']['multicanal']);
+    }
+
     public function test_requires_authentication(): void
     {
         $response = $this->get(route('sales.index'));
