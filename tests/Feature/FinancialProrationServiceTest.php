@@ -141,4 +141,54 @@ class FinancialProrationServiceTest extends TestCase
 
         $this->assertNull($result['break_even_revenue']);
     }
+
+    /**
+     * Relato do cliente (03/08/2026): CMV zerado no DRE. Causa raiz: o
+     * importador Magazord "Vendas por Item" grava o custo unitário em
+     * order_items.unit_cost (por SKU), mas nunca soma isso de volta pra
+     * orders.cost_products — só a sincronização com a API do Mercado Livre
+     * grava esse total direto no pedido. Sem esse fallback, todo pedido
+     * Magazord/Netshoes (a maioria das vendas reais do cliente) contava CMV
+     * zero, inflando artificialmente a margem de contribuição real.
+     */
+    public function test_cost_products_falls_back_to_order_items_unit_cost_when_order_field_is_zero(): void
+    {
+        $orderId = DB::table('orders')->insertGetId([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 1000,
+            'cost_products' => 0, 'cost_fee_commission' => 0, 'cost_fee_fixed' => 0,
+            'cost_fee_shipping' => 0, 'cost_fee_ads' => 0, 'cost_fee_taxes' => 0,
+            'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('order_items')->insert([
+            ['order_id' => $orderId, 'sku' => 'A', 'quantity' => 2, 'unit_price' => 100, 'unit_cost' => 40, 'created_at' => now(), 'updated_at' => now()],
+            ['order_id' => $orderId, 'sku' => 'B', 'quantity' => 1, 'unit_price' => 100, 'unit_cost' => 120, 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $service = app(FinancialProrationService::class);
+        $result = $service->calculateNetProfit($this->companyId, now()->year, now()->month);
+
+        // CMV real = (2 x 40) + (1 x 120) = 200, não zero.
+        $this->assertSame(200.0, $result['cost_products']);
+        $this->assertSame(800.0, $result['contribution_margin']);
+    }
+
+    /** Pedido ML (sync direto) já grava cost_products > 0 — não deve somar order_items por cima. */
+    public function test_cost_products_does_not_double_count_when_order_field_is_already_populated(): void
+    {
+        $orderId = DB::table('orders')->insertGetId([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 1000,
+            'cost_products' => 350, 'cost_fee_commission' => 0, 'cost_fee_fixed' => 0,
+            'cost_fee_shipping' => 0, 'cost_fee_ads' => 0, 'cost_fee_taxes' => 0,
+            'date_created' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('order_items')->insert([
+            'order_id' => $orderId, 'sku' => 'A', 'quantity' => 2, 'unit_price' => 100, 'unit_cost' => 40,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $service = app(FinancialProrationService::class);
+        $result = $service->calculateNetProfit($this->companyId, now()->year, now()->month);
+
+        $this->assertSame(350.0, $result['cost_products']);
+    }
 }

@@ -34,7 +34,21 @@ class FinancialProrationService
         $grossRevenue = (clone $ordersQuery)->sum('total_amount') ?: 0;
 
         // Custos Variáveis Acumulados
-        $costProducts = (clone $ordersQuery)->sum('cost_products') ?: 0;
+        //
+        // Incidente (03/08/2026): CMV aparecia zerado no DRE/Painel CFO pra
+        // pedidos importados via Magazord "Vendas por Item"/Netshoes. Esses
+        // importadores gravam o custo unitário em order_items.unit_cost (por
+        // SKU), mas nunca somam isso de volta pra orders.cost_products — só a
+        // sincronização com a API do Mercado Livre grava esse total
+        // diretamente no pedido. Quando cost_products está zerado, cai pro
+        // custo somado dos itens do próprio pedido (fonte real, não estimada).
+        $hasOrderItemsCost = Schema::hasTable('order_items')
+            && Schema::hasColumn('order_items', 'unit_cost')
+            && Schema::hasColumn('order_items', 'quantity');
+        $costProductsSql = $hasOrderItemsCost
+            ? 'COALESCE(NULLIF(cost_products, 0), (SELECT COALESCE(SUM(oi.unit_cost * oi.quantity), 0) FROM order_items oi WHERE oi.order_id = orders.id))'
+            : 'cost_products';
+        $costProducts = (clone $ordersQuery)->sum(DB::raw($costProductsSql)) ?: 0;
         $costFees = (clone $ordersQuery)->sum(DB::raw('cost_fee_commission + cost_fee_fixed + cost_fee_shipping + cost_fee_ads')) ?: 0;
         
         $hasCostTaxCol = \Illuminate\Support\Facades\Schema::hasColumn('orders', 'cost_tax_platform');
