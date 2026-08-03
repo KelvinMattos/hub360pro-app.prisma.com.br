@@ -43,6 +43,16 @@
     .mac-button-secondary {
         @apply mac-button bg-black/[0.05] text-[#1D1D1F] hover:bg-black/[0.08];
     }
+
+    /* Usadas em LoginPortal.vue e Financial/FixedExpenses.vue — nunca tinham
+       sido definidas, então os campos renderizavam sem estilo nenhum. */
+    .mac-label {
+        @apply block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1;
+    }
+
+    .mac-input {
+        @apply bg-black/[0.02] border border-black/[0.06] rounded-2xl px-5 py-4 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-blue-400 focus:bg-white focus:shadow-[0_0_0_4px_rgba(0,113,227,0.08)];
+    }
 }
 
 /* Custom Scrollbar macOS Style */
