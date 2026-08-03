@@ -94,6 +94,7 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('compras/notas-fiscais')->name('notas-fiscais.')->group(function () {
         Route::get('/', [\App\Http\Controllers\NotaFiscalController::class, 'index'])->name('index');
         Route::post('/reindex', [\App\Http\Controllers\NotaFiscalController::class, 'reindex'])->name('reindex');
+        Route::get('/reindex/progress/{token}', [\App\Http\Controllers\NotaFiscalController::class, 'reindexProgress'])->name('reindex.progress');
         Route::get('/{nota}/pdf', [\App\Http\Controllers\NotaFiscalController::class, 'view'])->name('view');
     });
 
