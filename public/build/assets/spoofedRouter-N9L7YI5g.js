@@ -1,1 +1,0 @@
-import{h as e}from"./app-lHZ2VO43.js";function a(t,o){const s=t.includes("?")?"&":"?";return`${t}${s}_method=${o}`}function n(t,o={},s={}){e.post(a(t,"PATCH"),o,s)}function r(t,o={},s={}){e.post(a(t,"PUT"),o,s)}function p(t,o={}){e.post(a(t,"DELETE"),{},o)}export{r as a,p as d,n as p};

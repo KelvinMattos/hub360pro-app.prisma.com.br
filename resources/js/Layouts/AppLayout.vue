@@ -25,7 +25,24 @@
                 <!-- Sections -->
                 <div v-for="section in navigation" :key="section.title" class="mb-8">
                     <p class="px-5 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-600 mb-4 opacity-80 decoration-slate-300">{{ section.title }}</p>
-                    <div class="space-y-0.5">
+
+                    <!-- Seções com submenus (grupos reais dentro da categoria) -->
+                    <template v-if="section.groups">
+                        <div v-for="group in section.groups" :key="group.label" class="mb-5 last:mb-0">
+                            <p class="px-5 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">{{ group.label }}</p>
+                            <div class="space-y-0.5">
+                                <NavLink v-for="item in group.items" :key="item.label"
+                                        :href="route(item.route, item.params || undefined)"
+                                        :active="item.params ? route().current(item.route, item.params) : route().current(item.activePattern || item.route)"
+                                        :icon="item.icon">
+                                    {{ item.label }}
+                                </NavLink>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Seções simples (sem submenu) -->
+                    <div v-else class="space-y-0.5">
                         <NavLink v-for="item in section.items" :key="item.label"
                                 :href="route(item.route, item.params || undefined)"
                                 :active="item.params ? route().current(item.route, item.params) : route().current(item.activePattern || item.route)"
@@ -124,36 +141,68 @@ const FEATURE_BY_ROUTE = {
     'marketplaces.listings.bulk': 'marketplaces_listings_bulk',
 };
 
+// Reorganizado em 03/08/2026 a pedido do cliente: cada item na sua categoria
+// real de função (vendas em Vendas, estoque em Estoque, etc.) e tudo que é
+// configuração ou importação de dados concentrado em "Ajustes & Importações",
+// com submenus por tipo dentro dela — antes ficava tudo espalhado em seções
+// soltas (ex: "Importar Preços de Mercado" morava em Monitoramento de Preços,
+// "Config. de Canais" em Decisão & Precificação, "Aging de Estoque" fora de
+// Estoque), o que não refletia a função real de cada tela.
 const navigationConfig = [
-    {
-        title: 'Monitoramento de Preços',
-        items: [
-            { label: 'Dashboard de Competitividade', route: 'monitoring.dashboard', icon: 'fa-solid fa-satellite-dish' },
-            { label: 'Produtos Monitorados', route: 'monitoring.products', icon: 'fa-solid fa-crosshairs' },
-            { label: 'Otimizar Preços', route: 'monitoring.optimize', icon: 'fa-solid fa-wand-magic-sparkles' },
-            { label: 'Relatório de Buy Box', route: 'monitoring.report', icon: 'fa-solid fa-chart-column' },
-            { label: 'Repricing Automático', route: 'monitoring.repricing', icon: 'fa-solid fa-gauge-high' },
-            { label: 'Coleta Buy Box (Netshoes)', route: 'monitoring.scraper', icon: 'fa-solid fa-robot' },
-            { label: 'Importar Preços de Mercado', route: 'monitoring.market.form', icon: 'fa-solid fa-file-arrow-up' },
-        ]
-    },
-    {
-        title: 'Decisão & Precificação',
-        items: [
-            { label: 'Centro de Decisão', route: 'decision.index', icon: 'fa-solid fa-chess-king' },
-            { label: 'Segmentação de SKU', route: 'segmentation.index', icon: 'fa-solid fa-layer-group' },
-            { label: 'Calculadora de Canais', route: 'calculator.index', icon: 'fa-solid fa-calculator' },
-            { label: 'Cálculo Promo', route: 'pricing.calculo-promo', activePattern: 'pricing.calculo-promo', icon: 'fa-solid fa-tags' },
-            { label: 'Preços por Canal', route: 'pricing.channel-prices', icon: 'fa-solid fa-table-cells' },
-            { label: 'Aging de Estoque', route: 'inventory.aging', icon: 'fa-solid fa-hourglass-half' },
-            { label: 'Config. de Canais', route: 'pricing.channels', icon: 'fa-solid fa-sliders' },
-            { label: 'Simulador 360', route: 'pricing.simulator', icon: 'fa-solid fa-flask' },
-        ]
-    },
     {
         title: 'Geral',
         items: [
             { label: 'Dashboard', route: 'dashboard', icon: 'fa-solid fa-gauge-high' },
+        ]
+    },
+    {
+        title: 'Precificação',
+        groups: [
+            {
+                label: 'Monitoramento de Mercado',
+                items: [
+                    { label: 'Dashboard de Competitividade', route: 'monitoring.dashboard', icon: 'fa-solid fa-satellite-dish' },
+                    { label: 'Produtos Monitorados', route: 'monitoring.products', icon: 'fa-solid fa-crosshairs' },
+                    { label: 'Otimizar Preços', route: 'monitoring.optimize', icon: 'fa-solid fa-wand-magic-sparkles' },
+                    { label: 'Relatório de Buy Box', route: 'monitoring.report', icon: 'fa-solid fa-chart-column' },
+                    { label: 'Repricing Automático', route: 'monitoring.repricing', icon: 'fa-solid fa-gauge-high' },
+                    { label: 'Coleta Buy Box (Netshoes)', route: 'monitoring.scraper', icon: 'fa-solid fa-robot' },
+                ],
+            },
+            {
+                label: 'Decisão & Simulação',
+                items: [
+                    { label: 'Centro de Decisão', route: 'decision.index', icon: 'fa-solid fa-chess-king' },
+                    { label: 'Segmentação de SKU', route: 'segmentation.index', icon: 'fa-solid fa-layer-group' },
+                    { label: 'Calculadora de Canais', route: 'calculator.index', icon: 'fa-solid fa-calculator' },
+                    { label: 'Cálculo Promo', route: 'pricing.calculo-promo', activePattern: 'pricing.calculo-promo', icon: 'fa-solid fa-tags' },
+                    { label: 'Preços por Canal', route: 'pricing.channel-prices', icon: 'fa-solid fa-table-cells' },
+                    { label: 'Simulador 360', route: 'pricing.simulator', icon: 'fa-solid fa-flask' },
+                ],
+            },
+        ],
+    },
+    {
+        title: 'Vendas',
+        items: [
+            { label: 'Central de Vendas', route: 'sales.index', icon: 'fa-solid fa-chart-simple' },
+            { label: 'Pedidos & Etiquetas', route: 'orders.index', activePattern: 'orders.*', icon: 'fa-solid fa-truck-fast' },
+            { label: 'Expedição Flash', route: 'orders.expedition', icon: 'fa-solid fa-barcode' },
+            { label: 'Perguntas', route: 'marketplaces.questions.index', icon: 'fa-solid fa-comments' },
+        ]
+    },
+    {
+        title: 'Estoque',
+        items: [
+            { label: 'Produtos', route: 'products.index', activePattern: 'products.*', icon: 'fa-solid fa-box' },
+            { label: 'Aging de Estoque', route: 'inventory.aging', icon: 'fa-solid fa-hourglass-half' },
+            { label: 'Reposição Inteligente', route: 'inventory.planning', icon: 'fa-solid fa-boxes-packing' },
+        ]
+    },
+    {
+        title: 'Compras',
+        items: [
+            { label: 'Notas Fiscais de Compra', route: 'notas-fiscais.index', icon: 'fa-solid fa-file-invoice' },
         ]
     },
     {
@@ -174,22 +223,11 @@ const navigationConfig = [
         ]
     },
     {
-        title: 'Vendas & Mercados',
-        items: [
-            { label: 'Análise de Vendas', route: 'sales.index', icon: 'fa-solid fa-chart-simple' },
-            { label: 'Pedidos & Etiquetas', route: 'orders.index', activePattern: 'orders.*', icon: 'fa-solid fa-truck-fast' },
-            { label: 'Expedição Flash', route: 'orders.expedition', icon: 'fa-solid fa-barcode' },
-            { label: 'Produtos', route: 'products.index', activePattern: 'products.*', icon: 'fa-solid fa-box' },
-            { label: 'Edição em Massa', route: 'marketplaces.listings.bulk', icon: 'fa-solid fa-wand-magic-sparkles' },
-            { label: 'Perguntas', route: 'marketplaces.questions.index', icon: 'fa-solid fa-comments' },
-            { label: 'Regras de Resposta', route: 'marketplaces.auto-reply.index', icon: 'fa-solid fa-robot' },
-        ]
-    },
-    {
         title: 'Omnichannel',
         items: [
             { label: 'Dashboard Omni', route: 'marketplaces.dashboard', icon: 'fa-solid fa-chart-pie' },
             { label: 'Gestão de Anúncios', route: 'marketplaces.listings.index', icon: 'fa-solid fa-list-check' },
+            { label: 'Edição em Massa', route: 'marketplaces.listings.bulk', icon: 'fa-solid fa-wand-magic-sparkles' },
             { label: 'Ads Intelligence', route: 'marketplaces.ads.index', icon: 'fa-solid fa-bullhorn' },
             { label: 'Price Race', route: 'marketplaces.price-rules.index', icon: 'fa-solid fa-bolt' },
         ]
@@ -198,57 +236,75 @@ const navigationConfig = [
         title: 'Inteligência',
         items: [
             { label: 'Relatórios & BI', route: 'reports.index', icon: 'fa-solid fa-chart-line' },
-            { label: 'Reposição Inteligente', route: 'inventory.planning', icon: 'fa-solid fa-boxes-packing' },
         ]
     },
     {
-        title: 'Compras',
-        items: [
-            { label: 'Notas Fiscais de Compra', route: 'notas-fiscais.index', icon: 'fa-solid fa-file-invoice' },
-        ]
+        title: 'Ajustes & Importações',
+        groups: [
+            {
+                label: 'Configurações',
+                items: [
+                    { label: 'Conexões', route: 'settings.integrations', icon: 'fa-solid fa-plug' },
+                    { label: 'Configurações do Sistema', route: 'settings.system', icon: 'fa-solid fa-gears' },
+                    { label: 'Minha Conta', route: 'settings.account', icon: 'fa-solid fa-user-gear' },
+                    { label: 'Config. de Canais', route: 'pricing.channels', icon: 'fa-solid fa-sliders' },
+                ],
+            },
+            {
+                label: 'Atendimento',
+                items: [
+                    { label: 'Regras de Resposta Automática', route: 'marketplaces.auto-reply.index', icon: 'fa-solid fa-robot' },
+                ],
+            },
+            {
+                label: 'Preços de Mercado',
+                items: [
+                    { label: 'Importar Preços de Mercado', route: 'monitoring.market.form', icon: 'fa-solid fa-file-arrow-up' },
+                ],
+            },
+            {
+                label: 'Importações Magazord',
+                items: [
+                    { label: 'Importar Estoque', route: 'magazord.show', params: { type: 'estoque' }, icon: 'fa-solid fa-boxes-stacked' },
+                    { label: 'Importar Custos de Produtos', route: 'magazord.show', params: { type: 'custos' }, icon: 'fa-solid fa-money-bill-trend-up' },
+                    { label: 'Importar Preços de Venda', route: 'magazord.show', params: { type: 'precos' }, icon: 'fa-solid fa-tags' },
+                    { label: 'Importar Produtos com Desconto', route: 'magazord.show', params: { type: 'descontos' }, icon: 'fa-solid fa-percent' },
+                    { label: 'Importar Produtos & Datas', route: 'magazord.show', params: { type: 'produtos' }, icon: 'fa-solid fa-calendar-day' },
+                    { label: 'Importar Vendas', route: 'magazord.show', params: { type: 'vendas' }, icon: 'fa-solid fa-cart-shopping' },
+                    { label: 'Importar Vendas por Item', route: 'magazord.show', params: { type: 'vendas_itens' }, icon: 'fa-solid fa-boxes-packing' },
+                    { label: 'Importar Detalhes do Pedido', route: 'magazord.show', params: { type: 'vendas_detalhes' }, icon: 'fa-solid fa-location-dot' },
+                ],
+            },
+            {
+                label: 'Importações Netshoes',
+                items: [
+                    { label: 'Importar Produtos Netshoes', route: 'netshoes.show', params: { type: 'produtos' }, icon: 'fa-solid fa-tags' },
+                    { label: 'Importar Estoque Netshoes', route: 'netshoes.show', params: { type: 'estoque' }, icon: 'fa-solid fa-boxes-stacked' },
+                    { label: 'Importar Preços Netshoes', route: 'netshoes.show', params: { type: 'precos' }, icon: 'fa-solid fa-tag' },
+                    { label: 'Importar Vendas Netshoes', route: 'netshoes.show', params: { type: 'vendas' }, icon: 'fa-solid fa-cart-shopping' },
+                ],
+            },
+        ],
     },
-    {
-        title: 'Importações Magazord',
-        items: [
-            { label: 'Importar Estoque', route: 'magazord.show', params: { type: 'estoque' }, icon: 'fa-solid fa-boxes-stacked' },
-            { label: 'Importar Custos de Produtos', route: 'magazord.show', params: { type: 'custos' }, icon: 'fa-solid fa-money-bill-trend-up' },
-            { label: 'Importar Preços de Venda', route: 'magazord.show', params: { type: 'precos' }, icon: 'fa-solid fa-tags' },
-            { label: 'Importar Produtos com Desconto', route: 'magazord.show', params: { type: 'descontos' }, icon: 'fa-solid fa-percent' },
-            { label: 'Importar Produtos & Datas', route: 'magazord.show', params: { type: 'produtos' }, icon: 'fa-solid fa-calendar-day' },
-            { label: 'Importar Vendas', route: 'magazord.show', params: { type: 'vendas' }, icon: 'fa-solid fa-cart-shopping' },
-            { label: 'Importar Vendas por Item', route: 'magazord.show', params: { type: 'vendas_itens' }, icon: 'fa-solid fa-boxes-packing' },
-            { label: 'Importar Detalhes do Pedido', route: 'magazord.show', params: { type: 'vendas_detalhes' }, icon: 'fa-solid fa-location-dot' },
-        ]
-    },
-    {
-        title: 'Importações Netshoes',
-        items: [
-            { label: 'Importar Produtos Netshoes', route: 'netshoes.show', params: { type: 'produtos' }, icon: 'fa-solid fa-tags' },
-            { label: 'Importar Estoque Netshoes', route: 'netshoes.show', params: { type: 'estoque' }, icon: 'fa-solid fa-boxes-stacked' },
-            { label: 'Importar Preços Netshoes', route: 'netshoes.show', params: { type: 'precos' }, icon: 'fa-solid fa-tag' },
-            { label: 'Importar Vendas Netshoes', route: 'netshoes.show', params: { type: 'vendas' }, icon: 'fa-solid fa-cart-shopping' },
-        ]
-    },
-    {
-        title: 'Sistema',
-        items: [
-            { label: 'Conexões', route: 'settings.integrations', icon: 'fa-solid fa-plug' },
-            { label: 'Configurações do Sistema', route: 'settings.system', icon: 'fa-solid fa-gears' },
-            { label: 'Minha Conta', route: 'settings.account', icon: 'fa-solid fa-user-gear' },
-        ]
-    }
 ];
+
+const filterItems = (items) => items.filter(item => {
+    const flag = FEATURE_BY_ROUTE[item.route];
+    return !flag || features.value[flag];
+});
 
 const features = computed(() => page.props.features || {});
 const navigation = computed(() => navigationConfig
-    .map(section => ({
-        ...section,
-        items: section.items.filter(item => {
-            const flag = FEATURE_BY_ROUTE[item.route];
-            return !flag || features.value[flag];
-        }),
-    }))
-    .filter(section => section.items.length > 0));
+    .map(section => {
+        if (section.groups) {
+            const groups = section.groups
+                .map(group => ({ ...group, items: filterItems(group.items) }))
+                .filter(group => group.items.length > 0);
+            return { ...section, groups };
+        }
+        return { ...section, items: filterItems(section.items) };
+    })
+    .filter(section => (section.groups ? section.groups.length > 0 : section.items.length > 0)));
 
 // Auto-clear flash messages after 5 seconds
 watch(flash, (newVal) => {
