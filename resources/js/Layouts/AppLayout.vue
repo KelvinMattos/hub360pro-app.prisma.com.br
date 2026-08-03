@@ -186,6 +186,7 @@ const navigationConfig = [
         title: 'Vendas',
         items: [
             { label: 'Central de Vendas', route: 'sales.index', icon: 'fa-solid fa-chart-simple' },
+            { label: 'Desempenho por Canal', route: 'sales.channel-performance.index', icon: 'fa-solid fa-calendar-days' },
             { label: 'Pedidos & Etiquetas', route: 'orders.index', activePattern: 'orders.*', icon: 'fa-solid fa-truck-fast' },
             { label: 'Expedição Flash', route: 'orders.expedition', icon: 'fa-solid fa-barcode' },
             { label: 'Perguntas', route: 'marketplaces.questions.index', icon: 'fa-solid fa-comments' },
@@ -260,6 +261,12 @@ const navigationConfig = [
                 label: 'Preços de Mercado',
                 items: [
                     { label: 'Importar Preços de Mercado', route: 'monitoring.market.form', icon: 'fa-solid fa-file-arrow-up' },
+                ],
+            },
+            {
+                label: 'Importações de Vendas',
+                items: [
+                    { label: 'Vendas Diárias por Canal', route: 'sales.channel-import.show', icon: 'fa-solid fa-calendar-days' },
                 ],
             },
             {

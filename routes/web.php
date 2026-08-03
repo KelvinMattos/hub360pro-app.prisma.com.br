@@ -161,6 +161,13 @@ Route::middleware(['auth'])->group(function () {
                 ->whereIn('type', ['produtos', 'estoque', 'precos', 'vendas'])->name('import');
         });
 
+        // Importação do Diário de Vendas por Canal (planilha manual do cliente)
+        Route::prefix('imports/vendas-canais')->name('sales.channel-import.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Sales\SalesChannelImportController::class, 'show'])->name('show');
+            Route::post('/', [\App\Http\Controllers\Sales\SalesChannelImportController::class, 'import'])->name('import');
+            Route::get('/progress/{token}', [\App\Http\Controllers\Sales\SalesChannelImportController::class, 'progress'])->name('progress');
+        });
+
         // Monitoramento de Preços (competitividade estilo Hooklab)
         Route::prefix('monitoring')->name('monitoring.')->group(function () {
             Route::get('/', [MonitoringController::class, 'dashboard'])->name('dashboard');
@@ -218,6 +225,13 @@ Route::middleware(['auth'])->group(function () {
 
         // Análise de Vendas (sobre pedidos importados)
         Route::get('/sales', [\App\Http\Controllers\SalesController::class , 'index'])->name('sales.index');
+
+        // Desempenho por Canal (Diário/Semanal/Mensal, ex-planilhas do cliente)
+        Route::prefix('sales/desempenho-canais')->name('sales.channel-performance.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Sales\SalesChannelPerformanceController::class, 'index'])->name('index');
+            Route::get('/export', [\App\Http\Controllers\Sales\SalesChannelPerformanceController::class, 'export'])->name('export');
+            Route::post('/metas', [\App\Http\Controllers\Sales\SalesChannelPerformanceController::class, 'saveGoal'])->name('goals.save');
+        });
 
         // Pedidos e Etiquetas (atrás de feature flag — ver config/features.php)
         Route::middleware('feature:orders')->group(function () {
