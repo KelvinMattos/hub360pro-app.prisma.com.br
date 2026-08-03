@@ -56,6 +56,13 @@ class FinancialProrationService
         // Percentual de Margem Líquida
         $marginPercent = $grossRevenue > 0 ? ($netProfit / $grossRevenue) * 100 : 0;
 
+        // Ponto de equilíbrio real: custo fixo dividido pela margem de contribuição
+        // (% da receita), não um multiplicador fixo — a tela de DRE usava
+        // `fixed_costs * 2,5` fabricado, sem relação com a margem real da empresa.
+        $breakEvenRevenue = ($grossRevenue > 0 && $contributionMargin > 0)
+            ? round($totalFixedCosts / ($contributionMargin / $grossRevenue), 2)
+            : null;
+
         return [
             'gross_revenue' => round($grossRevenue, 2),
             'cost_products' => round($costProducts, 2),
@@ -65,6 +72,7 @@ class FinancialProrationService
             'fixed_costs' => round($totalFixedCosts, 2),
             'net_profit' => round($netProfit, 2),
             'margin_percent' => round($marginPercent, 2),
+            'break_even_revenue' => $breakEvenRevenue,
             'order_count' => $orderCount,
             'period' => [
                 'month' => $month,

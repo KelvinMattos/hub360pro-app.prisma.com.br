@@ -38,12 +38,15 @@ class HealthDashboardController extends Controller
             (int)$month
         );
 
-        // Histórico para comparação (Últimos 6 meses)
+        // Histórico para comparação (Últimos 6 meses, ancorado no mês filtrado —
+        // não em "agora"). subMonthsNoOverflow() evita o bug de subMonths() rolar
+        // pro mês seguinte quando o dia atual não existe no mês de destino (ex.:
+        // dia 31 -> "-1 mês" vira 1º do mês seguinte em vez do mês anterior).
+        $anchor = Carbon::createFromDate((int) $year, (int) $month, 1);
         $history = [];
         for ($i = 5; $i >= 0; $i--) {
-            $m = Carbon::now()->subMonths($i)->format('m');
-            $y = Carbon::now()->subMonths($i)->format('Y');
-            $history[] = $this->financialService->calculateNetProfit($companyId, (int)$y, (int)$m);
+            $date = $anchor->copy()->subMonthsNoOverflow($i);
+            $history[] = $this->financialService->calculateNetProfit($companyId, (int) $date->format('Y'), (int) $date->format('m'));
         }
 
         return Inertia::render('Financial/DreDashboard', [

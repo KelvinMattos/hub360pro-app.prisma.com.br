@@ -1,19 +1,28 @@
 <template>
-    <AppLayout>
+    <AppLayout title="Painel CFO Digital">
         <div class="p-8">
             <!-- Header -->
-            <div class="flex justify-between items-end mb-10">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-6">
                 <div>
                     <h1 class="text-4xl font-extrabold text-slate-900 tracking-tight">
                         CFO <span class="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Digital</span>
                     </h1>
-                    <p class="text-slate-400 mt-2 font-medium text-lg">Inteligência financeira em tempo real.</p>
+                    <p class="text-slate-400 mt-2 font-medium text-lg">{{ period.label || 'Inteligência financeira em tempo real.' }}</p>
                 </div>
-                <div class="flex gap-3">
-                    <button class="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm">
-                        <i class="fa-solid fa-download"></i> Exportar
+                <div class="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+                    <input type="month" v-model="monthInput" @change="applyMonth"
+                        class="text-sm border-none bg-transparent px-3 py-2 outline-none font-bold text-slate-700 cursor-pointer">
+                    <div class="w-px h-4 bg-slate-200"></div>
+                    <button @click="goToCurrentMonth" class="px-4 py-2 text-sm font-bold text-blue-600 hover:bg-blue-50 rounded-xl transition-colors">
+                        Mês atual
                     </button>
                 </div>
+            </div>
+
+            <!-- Aviso de ajuste automático de período -->
+            <div v-if="autoFallback" class="mb-8 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium flex items-center gap-3">
+                <i class="fa-solid fa-circle-info text-amber-500"></i>
+                Nenhum pedido confirmado neste mês ainda. Mostrando o último mês com dados: <b>{{ period.label }}</b>.
             </div>
 
             <!-- Main Metrics Grid -->
@@ -135,15 +144,30 @@
 </template>
 
 <script setup>
+import { ref } from 'vue';
+import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
-defineProps({
+const props = defineProps({
     stats: Object,
     history: Array,
     companyName: String,
     revenueGrowthPct: { type: Number, default: null },
     marginDeltaVsHistoryPct: { type: Number, default: null },
+    period: { type: Object, default: () => ({ month: '', label: null }) },
+    autoFallback: { type: Boolean, default: false },
 });
+
+const monthInput = ref(props.period.month);
+
+const applyMonth = () => {
+    if (!monthInput.value) return;
+    router.get(route('financial.dashboard'), { month: monthInput.value }, { preserveScroll: true, preserveState: false });
+};
+
+const goToCurrentMonth = () => {
+    router.get(route('financial.dashboard'), {}, { preserveScroll: true, preserveState: false });
+};
 
 const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', { 

@@ -106,4 +106,39 @@ class FinancialProrationServiceTest extends TestCase
         $this->assertSame(1, $result['order_count']);
         $this->assertSame(777.0, $result['gross_revenue']);
     }
+
+    /**
+     * A tela de DRE calculava o ponto de equilíbrio como `custo_fixo * 2,5`,
+     * um multiplicador inventado sem relação com a margem real da empresa.
+     * O correto é custo fixo dividido pela margem de contribuição (% da
+     * receita) — quanto pior a margem, mais alto precisa ser o faturamento
+     * pra empatar.
+     */
+    public function test_break_even_revenue_uses_real_contribution_margin_ratio(): void
+    {
+        $this->insertOrder([
+            'total_amount' => 1000, 'cost_products' => 400,
+            'cost_fee_commission' => 0, 'cost_fee_fixed' => 0, 'cost_fee_shipping' => 0,
+            'date_created' => now(),
+        ]);
+        DB::table('fixed_expenses')->insert([
+            'company_id' => $this->companyId, 'description' => 'Aluguel', 'amount' => 300,
+            'expense_date' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $service = app(FinancialProrationService::class);
+        $result = $service->calculateNetProfit($this->companyId, now()->year, now()->month);
+
+        // Margem de contribuição = 1000 - 400 = 600 (60% da receita).
+        // Break-even = 300 / 0.6 = 500.
+        $this->assertSame(500.0, $result['break_even_revenue']);
+    }
+
+    public function test_break_even_revenue_is_null_without_contribution_margin(): void
+    {
+        $service = app(FinancialProrationService::class);
+        $result = $service->calculateNetProfit($this->companyId, now()->year, now()->month);
+
+        $this->assertNull($result['break_even_revenue']);
+    }
 }

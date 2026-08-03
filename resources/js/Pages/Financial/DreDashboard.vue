@@ -141,9 +141,13 @@
                         <div class="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
                             <i class="fa-solid fa-flag-checkered text-xl"></i>
                         </div>
-                        <div>
-                            <p class="text-slate-900 font-bold">R$ {{ formatCurrency(indicators.fixed_costs * 2.5) }}</p>
+                        <div v-if="indicators.break_even_revenue !== null">
+                            <p class="text-slate-900 font-bold">R$ {{ formatCurrency(indicators.break_even_revenue) }}</p>
                             <p class="text-xs text-slate-400 font-medium">Faturamento necessário p/ lucro zero</p>
+                        </div>
+                        <div v-else>
+                            <p class="text-slate-400 font-bold" title="dados insuficientes">—</p>
+                            <p class="text-xs text-slate-400 font-medium">Sem margem de contribuição no período pra calcular</p>
                         </div>
                     </div>
                 </div>
