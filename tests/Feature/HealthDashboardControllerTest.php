@@ -78,4 +78,48 @@ class HealthDashboardControllerTest extends TestCase
             ->where('history.0.period.year', 2025)
         );
     }
+
+    /**
+     * Mesmo relato do cliente já corrigido no Painel CFO, agora reportado no
+     * DRE Executivo também: sem pedido confirmado no mês corrente e sem
+     * filtro explícito, a tela aparecia zerada mesmo com meses anteriores
+     * cheios de dado real.
+     */
+    public function test_dre_falls_back_to_last_month_with_orders_when_current_month_is_empty(): void
+    {
+        $user = $this->authenticatedUser();
+
+        $realDate = now()->subMonthsNoOverflow(2)->startOfMonth()->addDays(3);
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 900,
+            'date_created' => $realDate, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->get(route('financial.dre'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Financial/DreDashboard')
+            ->where('indicators.gross_revenue', 900)
+            ->where('autoFallback', true)
+            ->where('filters.month', (int) $realDate->format('m'))
+            ->where('filters.year', (int) $realDate->format('Y'))
+        );
+    }
+
+    /** Filtro explícito de mês/ano nunca aciona o fallback automático, mesmo vazio. */
+    public function test_dre_accepts_explicit_month_filter_without_triggering_fallback(): void
+    {
+        $user = $this->authenticatedUser();
+
+        $response = $this->actingAs($user)->get(route('financial.dre', ['month' => '03', 'year' => '2026']));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Financial/DreDashboard')
+            ->where('autoFallback', false)
+            ->where('filters.month', 3)
+            ->where('filters.year', 2026)
+        );
+    }
 }

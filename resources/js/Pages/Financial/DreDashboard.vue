@@ -1,15 +1,15 @@
 <template>
-    <AppLayout>
+    <AppLayout title="DRE Executivo">
         <div class="p-8">
             <!-- Header with Period Filter -->
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-6">
                 <div>
                     <h1 class="text-4xl font-extrabold text-slate-900 tracking-tight">
                         DRE <span class="bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Executivo</span>
                     </h1>
                     <p class="text-slate-400 mt-2 font-medium text-lg">Demonstração do Resultado do Exercício - {{ indicators.period.label }}</p>
                 </div>
-                
+
                 <div class="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-premium">
                     <select v-model="filter.month" class="bg-transparent border-none text-sm font-bold text-slate-700 focus:ring-0 cursor-pointer">
                         <option v-for="(m, i) in months" :key="i" :value="i + 1">{{ m }}</option>
@@ -22,6 +22,12 @@
                         <i class="fa-solid fa-sync"></i>
                     </button>
                 </div>
+            </div>
+
+            <!-- Aviso de ajuste automático de período -->
+            <div v-if="autoFallback" class="mb-8 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium flex items-center gap-3">
+                <i class="fa-solid fa-circle-info text-amber-500"></i>
+                Nenhum pedido confirmado neste mês ainda. Mostrando o último mês com dados: <b>{{ indicators.period.label }}</b>.
             </div>
 
             <!-- DRE Structure Card -->
@@ -178,7 +184,8 @@ import DreItem from '@/Components/DreItem.vue';
 const props = defineProps({
     indicators: Object,
     history: Array,
-    filters: Object
+    filters: Object,
+    autoFallback: { type: Boolean, default: false },
 });
 
 const filter = reactive({
