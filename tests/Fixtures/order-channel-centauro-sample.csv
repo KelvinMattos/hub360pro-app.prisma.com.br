@@ -1,0 +1,4 @@
+NumeroPedido;Account;StatusEntrega;DataCriacao;DataPagamento;DataFaturamento;DataEstimadaDespacho;DataDespacho;DataPrometida;DataEntrega;IdModelo;SkuCentauro;NomeProduto;SkuSeller;QuantidadeSku;ValorSku;Desconto;Cupom;ValorFrete;CpfCnpjCliente;CepCliente;EnderecoCliente;BairroCliente;CidadeCliente;UfCliente;TipoFrete;UrlRastreio;CodigoRastreio
+CT0001;sportimemagazord;Entregue;"2026-01-03 17:57:27.26";;;;;;;M17CL9;M17CL94M0431;"Produto Centauro Um";;1;446.90;41.00;;20.26;00314578005;95270000;"Rua Teste";Bairro;"FLORES DA CUNHA";RS;Correios;;
+CT0002;sportimemagazord;Entregue;"2026-01-03 19:21:00.517";;;;;;;M17DYD;M17DYD020378;"Produto Centauro Dois Item A";;1;150.00;10.00;;15.00;02994686406;52221040;"Rua Teste 2";"Bairro 2";RECIFE;PE;Correios;;
+CT0002;sportimemagazord;Entregue;"2026-01-03 19:21:00.517";;;;;;;M17DYE;M17DYE020379;"Produto Centauro Dois Item B";;2;80.00;10.00;;15.00;02994686406;52221040;"Rua Teste 2";"Bairro 2";RECIFE;PE;Correios;;

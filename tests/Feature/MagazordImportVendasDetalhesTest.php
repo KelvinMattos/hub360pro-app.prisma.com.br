@@ -150,6 +150,23 @@ class MagazordImportVendasDetalhesTest extends TestCase
         $this->assertFalse($estados->contains('BA'));
     }
 
+    /**
+     * Achado ao revisar se os importadores de Vendas do Magazord aproveitam
+     * tudo que a planilha real traz (pedido do cliente 03/08/2026): "Vlr
+     * Desconto"/"Vlr Acréscimo" existiam no arquivo e eram descartados —
+     * orders não tinha coluna pra isso. O pedido 6002 desta fixture tem
+     * Vlr Desconto=10,0000 real.
+     */
+    public function test_import_captures_discount_amount(): void
+    {
+        $user = $this->authenticatedUser();
+
+        $this->import($user);
+
+        $this->assertDatabaseHas('orders', ['ml_order_id' => 6002, 'discount_amount' => 10]);
+        $this->assertDatabaseHas('orders', ['ml_order_id' => 6001, 'discount_amount' => 0, 'surcharge_amount' => 0]);
+    }
+
     public function test_import_requires_authentication(): void
     {
         $response = $this->post(route('magazord.import', ['type' => 'vendas_detalhes']), [

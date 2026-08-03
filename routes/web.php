@@ -168,6 +168,15 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/progress/{token}', [\App\Http\Controllers\Sales\SalesChannelImportController::class, 'progress'])->name('progress');
         });
 
+        // Importações nativas de Vendas por canal (export próprio de cada marketplace, multi-conta)
+        Route::prefix('imports/vendas-marketplaces')->name('order-channel.')->group(function () {
+            Route::get('/{type}', [\App\Http\Controllers\Sales\OrderChannelImportController::class, 'show'])
+                ->whereIn('type', ['mercado_livre', 'shopee', 'centauro', 'renner', 'magalu'])->name('show');
+            Route::post('/{type}', [\App\Http\Controllers\Sales\OrderChannelImportController::class, 'import'])
+                ->whereIn('type', ['mercado_livre', 'shopee', 'centauro', 'renner', 'magalu'])->name('import');
+            Route::get('/progress/{token}', [\App\Http\Controllers\Sales\OrderChannelImportController::class, 'progress'])->name('progress');
+        });
+
         // Monitoramento de Preços (competitividade estilo Hooklab)
         Route::prefix('monitoring')->name('monitoring.')->group(function () {
             Route::get('/', [MonitoringController::class, 'dashboard'])->name('dashboard');
@@ -231,6 +240,14 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/', [\App\Http\Controllers\Sales\SalesChannelPerformanceController::class, 'index'])->name('index');
             Route::get('/export', [\App\Http\Controllers\Sales\SalesChannelPerformanceController::class, 'export'])->name('export');
             Route::post('/metas', [\App\Http\Controllers\Sales\SalesChannelPerformanceController::class, 'saveGoal'])->name('goals.save');
+        });
+
+        // Contas por canal (multi-conta: Mercado Livre, Shopee, Centauro, Renner, Magalu)
+        Route::prefix('sales/contas-canais')->name('sales.channel-accounts.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Sales\SalesChannelAccountController::class, 'index'])->name('index');
+            Route::post('/', [\App\Http\Controllers\Sales\SalesChannelAccountController::class, 'store'])->name('store');
+            Route::patch('/{account}/toggle', [\App\Http\Controllers\Sales\SalesChannelAccountController::class, 'toggle'])->name('toggle');
+            Route::delete('/{account}', [\App\Http\Controllers\Sales\SalesChannelAccountController::class, 'destroy'])->name('destroy');
         });
 
         // Pedidos e Etiquetas (atrás de feature flag — ver config/features.php)
