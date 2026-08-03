@@ -108,11 +108,38 @@
                 <Pagination :links="notas.links" class="p-4" />
             </div>
         </div>
+
+        <!-- ===== OVERLAY DE PROGRESSO DA REINDEXAÇÃO ===== -->
+        <Teleport to="body">
+        <transition name="fade">
+            <div v-if="reindexing" class="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+                    <div class="w-16 h-16 mx-auto mb-5 relative">
+                        <div class="absolute inset-0 rounded-full border-4 border-slate-100"></div>
+                        <div class="absolute inset-0 rounded-full border-4 border-blue-500 border-t-transparent animate-spin"></div>
+                        <i class="fa-solid fa-file-invoice absolute inset-0 flex items-center justify-center text-blue-500 text-lg"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-800">Reindexando notas fiscais…</h3>
+                    <p class="text-sm text-slate-500 mt-1">
+                        <span class="font-mono font-bold text-blue-600 text-lg">{{ n(live.done) }}</span>
+                        <span v-if="live.total"> de <span class="font-mono">{{ n(live.total) }}</span></span> PDFs
+                    </p>
+                    <div v-if="live.total" class="mt-4 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-emerald-500 rounded-full transition-all" :style="{ width: livePct + '%' }"></div>
+                    </div>
+                    <div v-else class="mt-4 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full w-1/3 bg-emerald-400 rounded-full animate-pulse"></div>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-3">Não feche esta aba. Um lote grande de PDFs pode levar vários minutos.</p>
+                </div>
+            </div>
+        </transition>
+        </Teleport>
     </AppLayout>
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
+import { reactive, ref, computed, onUnmounted } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Pagination from '@/Components/Pagination.vue';
@@ -132,6 +159,11 @@ const filtroForm = reactive({
 });
 const submitted = ref(!!props.filtros.termo);
 const reindexing = ref(false);
+const live = ref({ done: 0, total: 0 });
+const livePct = computed(() => live.value.total ? Math.min(100, Math.round(live.value.done / live.value.total * 100)) : 0);
+let pollTimer = null;
+
+onUnmounted(stopPoll);
 
 function buscar() {
     submitted.value = true;
@@ -143,11 +175,46 @@ function filtrar() {
 }
 
 function reindexar() {
+    const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    live.value = { done: 0, total: 0 };
     reindexing.value = true;
-    router.post(route('notas-fiscais.reindex'), {}, {
-        onFinish: () => { reindexing.value = false; },
+    startPoll(token);
+
+    router.post(route('notas-fiscais.reindex'), { progress_token: token }, {
+        preserveScroll: true,
+        onError: () => {
+            // Erro na conexão (ex.: Cloudflare cortando um lote grande em ~100s,
+            // CLAUDE.md §6.3) não significa que a reindexação parou — o backend
+            // continua rodando com ignore_user_abort e o resultado real chega
+            // pelo polling. Só encerra o overlay quando o polling confirmar 'done'.
+        },
+        onFinish: () => {
+            // Requisição HTTP terminou (com ou sem erro), mas o polling é quem
+            // decide quando a reindexação de fato acabou.
+        },
     });
 }
+
+function startPoll(token) {
+    stopPoll();
+    pollTimer = setInterval(async () => {
+        try {
+            const url = route('notas-fiscais.reindex.progress', token) + `?t=${Date.now()}`;
+            const r = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+            if (!r.ok) return;
+            const d = await r.json();
+            live.value = { done: d.done || 0, total: d.total || 0 };
+            if (d.status === 'done') {
+                reindexing.value = false;
+                stopPoll();
+                router.reload({ only: ['notas'] });
+            }
+        } catch (e) { /* ignora falhas transitórias de rede */ }
+    }, 1000);
+}
+function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+function n(v) { return (v ?? 0).toLocaleString('pt-BR'); }
 
 function pdfUrl(notaId, page) {
     const base = route('notas-fiscais.view', notaId);
@@ -166,3 +233,8 @@ function statusClass(status) {
     }[status] || 'bg-gray-100 text-gray-500';
 }
 </script>
+
+<style scoped>
+.fade-enter-active, .fade-leave-active { transition: opacity .2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+</style>

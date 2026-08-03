@@ -115,4 +115,41 @@ class NotaFiscalControllerTest extends TestCase
             'company_id' => $user->company_id, 'filename' => 'a.pdf', 'status' => 'indexed',
         ]);
     }
+
+    /**
+     * Incidente relatado pelo cliente (03/08/2026): com milhares de PDFs reais,
+     * a reindexação sempre caía em erro 500 "depois de alguns instantes" —
+     * faltava `set_time_limit(0)`, então o max_execution_time padrão do PHP
+     * matava o processo no meio do laço. Sem forma de reproduzir milhares de
+     * PDFs num teste, o que dá pra travar é o essencial: o progresso fica
+     * disponível via polling (Cache::store('file')) desde o início até o
+     * status 'done', igual ao padrão já usado nas importações Magazord/Netshoes.
+     */
+    public function test_reindex_com_progress_token_disponibiliza_progresso_via_polling(): void
+    {
+        $user = $this->authenticatedUser();
+        Storage::fake('notas_fiscais');
+        Storage::disk('notas_fiscais')->put('a.pdf', file_get_contents(base_path('tests/Fixtures/notas-fiscais/nota-teste.pdf')));
+
+        $token = 'teste-token-123';
+
+        $response = $this->actingAs($user)->post(route('notas-fiscais.reindex'), ['progress_token' => $token]);
+        $response->assertRedirect();
+
+        $progress = $this->actingAs($user)->get(route('notas-fiscais.reindex.progress', $token));
+        $progress->assertOk();
+        $progress->assertJson(['status' => 'done', 'done' => 1, 'total' => 1]);
+        $progress->assertJsonStructure(['result' => ['ok', 'indexed', 'failed', 'skipped', 'total']]);
+    }
+
+    /** Sem token nenhum ainda salvo, o polling responde 'pending' em vez de erro. */
+    public function test_reindex_progress_sem_token_conhecido_retorna_pending(): void
+    {
+        $user = $this->authenticatedUser();
+
+        $response = $this->actingAs($user)->get(route('notas-fiscais.reindex.progress', 'token-inexistente'));
+
+        $response->assertOk();
+        $response->assertJson(['status' => 'pending', 'done' => 0, 'total' => 0]);
+    }
 }

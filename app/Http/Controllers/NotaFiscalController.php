@@ -6,6 +6,7 @@ use App\Models\NotaFiscalCompra;
 use App\Models\NotaFiscalPagina;
 use App\Services\NotasFiscais\NotaFiscalIndexService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
@@ -49,18 +50,68 @@ class NotaFiscalController extends Controller
         ]);
     }
 
+    /**
+     * Incidente (03/08/2026): com milhares de PDFs reais na pasta, indexar
+     * ultrapassa em muito o `max_execution_time` padrão do PHP no cPanel
+     * (tipicamente 30s) — o processo era morto no meio do laço e a requisição
+     * voltava como 500, sempre "depois de alguns instantes". Faltava aqui o
+     * mesmo `set_time_limit(0)` que toda outra importação longa do sistema já
+     * usa (Magazord, Netshoes, scraper). Some a isso o corte de origem do
+     * Cloudflare em ~100s (CLAUDE.md §6.3): mesmo sem limite de tempo do PHP,
+     * um lote de milhares de PDFs não cabe numa única resposta HTTP. Por isso
+     * agora segue o mesmo padrão de progresso em cache de arquivo + polling
+     * já usado nas importações Magazord/Netshoes — com `ignore_user_abort`,
+     * o processo continua rodando no servidor mesmo se o Cloudflare cortar a
+     * conexão do navegador, e o resultado real chega pelo polling.
+     */
     public function reindex(Request $request, NotaFiscalIndexService $service)
     {
+        @set_time_limit(0);
+        @ignore_user_abort(true);
+
         $companyId = $request->user()->company_id;
         $force = $request->boolean('force', true);
+        $token = (string) $request->input('progress_token', '') ?: null;
+        $key = $this->progressKey($token);
 
-        $result = $service->indexAll($companyId, $force);
+        $onProgress = $key ? function (int $done, int $total) use ($key) {
+            if ($done % 10 === 0 || $done === $total) {
+                try {
+                    Cache::store('file')->put($key, ['status' => 'processing', 'done' => $done, 'total' => $total], now()->addMinutes(30));
+                } catch (\Throwable $e) {
+                    // progresso é best-effort; nunca derruba a reindexação
+                }
+            }
+        } : null;
+
+        $result = $service->indexAll($companyId, $force, $onProgress);
+
+        if ($key) {
+            try {
+                Cache::store('file')->put($key, ['status' => 'done', 'done' => $result['total'] ?? 0, 'total' => $result['total'] ?? 0, 'result' => $result], now()->addMinutes(30));
+            } catch (\Throwable $e) {
+                // idem — nunca derruba a reindexação por falha de cache
+            }
+        }
 
         if (! $result['ok']) {
             return back()->with('error', $result['error']);
         }
 
         return back()->with('success', "Reindexação concluída: {$result['indexed']} indexadas, {$result['skipped']} ignoradas, {$result['failed']} falharam (de {$result['total']} PDFs).");
+    }
+
+    /** Endpoint de polling do progresso da reindexação (sem cache, JSON). */
+    public function reindexProgress(string $token)
+    {
+        $data = Cache::store('file')->get($this->progressKey($token)) ?: ['status' => 'pending', 'done' => 0, 'total' => 0];
+
+        return response()->json($data)->header('Cache-Control', 'no-store');
+    }
+
+    private function progressKey(?string $token): ?string
+    {
+        return $token ? 'nf_reindex_' . preg_replace('/[^a-zA-Z0-9_-]/', '', $token) : null;
     }
 
     public function view(Request $request, NotaFiscalCompra $nota)
