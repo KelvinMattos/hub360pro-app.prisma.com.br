@@ -92,6 +92,55 @@ class FinancialDashboardControllerTest extends TestCase
             ->where('stats.contributionMargin', 0) // guarda de divisão por zero, nunca NaN
             ->where('revenueGrowthPct', null)
             ->where('marginDeltaVsHistoryPct', null)
+            ->where('autoFallback', false)
+        );
+    }
+
+    /**
+     * Incidente relatado pelo cliente (03/08/2026): o painel só olhava o mês
+     * corrente, sem filtro nenhum. Nos primeiros dias de qualquer mês, antes
+     * de qualquer pedido confirmado ser importado, a tela inteira aparecia
+     * zerada — mesmo com meses anteriores cheios de dado real. Sem filtro
+     * explícito e sem pedido no mês corrente, deve cair pro último mês com
+     * pedido de verdade, avisando isso na tela (nunca troca em silêncio).
+     */
+    public function test_index_falls_back_to_last_month_with_orders_when_current_month_is_empty(): void
+    {
+        $user = $this->authenticatedUser();
+
+        $realDate = now()->subMonthsNoOverflow(2)->startOfMonth()->addDays(3);
+        DB::table('orders')->insert([
+            'company_id' => $this->companyId, 'status' => 'paid', 'total_amount' => 900,
+            'date_created' => $realDate, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->get(route('financial.dashboard'));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Financial/Dashboard')
+            ->where('stats.grossRevenue', 900)
+            ->where('autoFallback', true)
+            ->where('period.month', $realDate->format('Y-m'))
+        );
+    }
+
+    /** Filtro explícito de mês (?month=Y-m) nunca aciona o fallback automático, mesmo vazio. */
+    public function test_index_accepts_explicit_month_filter_without_triggering_fallback(): void
+    {
+        $user = $this->authenticatedUser();
+
+        $targetMonth = now()->subMonthsNoOverflow(3)->startOfMonth();
+        $this->insertOrder($targetMonth->copy()->addDays(1), 300, 100);
+
+        $response = $this->actingAs($user)->get(route('financial.dashboard', ['month' => $targetMonth->format('Y-m')]));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('Financial/Dashboard')
+            ->where('stats.grossRevenue', 300)
+            ->where('autoFallback', false)
+            ->where('period.month', $targetMonth->format('Y-m'))
         );
     }
 }
