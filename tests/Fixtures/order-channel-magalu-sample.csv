@@ -1,0 +1,3 @@
+"Número do pedido","Data do Pedido","Canal de vendas","Codigo SKU seller","Título do produto","Quantidade de itens","Valor Total do Item","Valor bruto do pedido","Último Evento","Forma de pagamento 1","CPF/CNPJ do Cliente","Nome do cliente","Serviços do marketplace (1+2+3+4) (Forma de pagamento 1)"
+LU-0001,"01/07/2026 12:01:27","Magazine Luiza",46,"Produto Magalu Um",1,"R$ 19.89","R$ 19.89",Cancelado,Pix,02781265000108,"Cliente Magalu Um","R$ -3.58"
+LU-0002,"02/07/2026 10:00:00","Magazine Luiza",84p,"Produto Magalu Dois",1,"R$ 37.90","R$ 37.90","Seu pedido está a caminho da loja.",Pix,03851437969,"Cliente Magalu Dois","R$ -6.82"

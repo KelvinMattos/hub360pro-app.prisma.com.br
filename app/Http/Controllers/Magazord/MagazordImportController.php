@@ -87,8 +87,8 @@ class MagazordImportController extends Controller
             'target' => 'orders',
             'key_label' => 'Pedido Id',
             'value_label' => 'Valor Total Pedido',
-            'description' => 'Cria/atualiza pedidos, cruzando pelo "Pedido Id" (external_id). Importa cliente, documento, canal, situação, data e valores. O arquivo é a nível de pedido (sem itens), então não gera linhas de produto.',
-            'columns' => ['Pedido Id', 'Código', 'Data/Hora', 'Cliente', 'CPF/CNPJ', 'Situação', 'Marketplace', 'Forma de Pagamento', 'Valor Total Pedido'],
+            'description' => 'Cria/atualiza pedidos, cruzando pelo "Pedido Id" (external_id). Importa cliente, documento, canal, situação, data, desconto, acréscimo (juros de parcelamento) e valores. O arquivo é a nível de pedido (sem itens), então não gera linhas de produto.',
+            'columns' => ['Pedido Id', 'Código', 'Data/Hora', 'Cliente', 'CPF/CNPJ', 'Situação', 'Marketplace', 'Forma de Pagamento', 'Valor Desconto', 'Valor Acréscimo', 'Valor Total Pedido'],
             'can_create' => true,
         ],
         'vendas_itens' => [
@@ -107,7 +107,7 @@ class MagazordImportController extends Controller
             'target' => 'orders + customers (cidade/estado)',
             'key_label' => 'Pedido',
             'value_label' => 'Cidade · Estado · Vlr Total',
-            'description' => 'Modelo "Consulta Dinâmica – Detalhes do Pedido" (FADERIM → Consultas Dinâmicas). Cria/atualiza pedido e cliente com o dado que os outros modelos de Vendas não trazem: cidade e estado do comprador — essencial pro relatório de Vendas por Região, que hoje fica vazio pra pedidos Magazord por falta exatamente desse dado. Cruza pelo "Pedido".',
+            'description' => 'Modelo "Consulta Dinâmica – Detalhes do Pedido" (FADERIM → Consultas Dinâmicas). Cria/atualiza pedido e cliente com o dado que os outros modelos de Vendas não trazem: cidade e estado do comprador — essencial pro relatório de Vendas por Região, que hoje fica vazio pra pedidos Magazord por falta exatamente desse dado. Também grava desconto e acréscimo (juros de parcelamento). Cruza pelo "Pedido".',
             'columns' => ['Pedido', 'Data', 'Origem', 'Forma Pgto', 'Situação', 'Pessoa', 'CPF/CNPJ', 'Cidade', 'Estado', 'Vlr Produto', 'Vlr Acréscimo', 'Vlr Desconto', 'Vlr Frete', 'Vlr Total'],
             'can_create' => true,
         ],
@@ -682,6 +682,8 @@ class MagazordImportController extends Controller
         $totalCol = $pick(['total_amount']);
         $paidCol = $pick(['total_paid_amount']);
         $dateCol = $pick(['date_created', 'order_date']);
+        $discountCol = $pick(['discount_amount']);
+        $surchargeCol = $pick(['surcharge_amount']);
         $hasCompany = in_array('company_id', $cols, true);
         $hasTimestamps = in_array('created_at', $cols, true);
         $hasCustomerId = in_array('customer_id', $cols, true);
@@ -714,6 +716,8 @@ class MagazordImportController extends Controller
                 if ($totalCol)  $payload[$totalCol]  = $total;
                 if ($paidCol)   $payload[$paidCol]   = $total;
                 if ($dateCol)   $payload[$dateCol]   = $this->parseDate($this->col($row, ['Data/Hora', 'Data Aprovação']));
+                if ($discountCol) { $v = $this->brNumber($this->col($row, ['Valor Desconto'])); if ($v !== null) $payload[$discountCol] = $v; }
+                if ($surchargeCol) { $v = $this->brNumber($this->col($row, ['Valor Acréscimo'])); if ($v !== null) $payload[$surchargeCol] = $v; }
 
                 // CPF é a chave que une o mesmo cliente entre canais — ver
                 // CustomerIdentityService. Sem isso, cada importação criava um
@@ -788,6 +792,8 @@ class MagazordImportController extends Controller
         $paidCol = $pick(['total_paid_amount']);
         $shippingCol = $pick(['shipping_cost']);
         $dateCol = $pick(['date_created', 'order_date']);
+        $discountCol = $pick(['discount_amount']);
+        $surchargeCol = $pick(['surcharge_amount']);
         $hasCompany = in_array('company_id', $cols, true);
         $hasTimestamps = in_array('created_at', $cols, true);
         $hasCustomerId = in_array('customer_id', $cols, true);
@@ -806,6 +812,8 @@ class MagazordImportController extends Controller
 
                 $total = $this->brNumber($this->col($row, ['Vlr Total'])) ?? 0;
                 $frete = $this->brNumber($this->col($row, ['Vlr Frete']));
+                $desconto = $this->brNumber($this->col($row, ['Vlr Desconto']));
+                $acrescimo = $this->brNumber($this->col($row, ['Vlr Acréscimo']));
                 $docRaw = $this->col($row, ['CPF/CNPJ']);
                 $nameRaw = $this->col($row, ['Pessoa']);
                 $channelRaw = $this->col($row, ['Origem']);
@@ -821,6 +829,8 @@ class MagazordImportController extends Controller
                 if ($totalCol)    $payload[$totalCol]    = $total;
                 if ($paidCol)     $payload[$paidCol]     = $total;
                 if ($shippingCol && $frete !== null) $payload[$shippingCol] = $frete;
+                if ($discountCol && $desconto !== null) $payload[$discountCol] = $desconto;
+                if ($surchargeCol && $acrescimo !== null) $payload[$surchargeCol] = $acrescimo;
                 if ($dateCol)     $payload[$dateCol]     = $this->parseDate($this->col($row, ['Data']));
 
                 // CPF + cidade/estado é a chave que une o mesmo cliente entre

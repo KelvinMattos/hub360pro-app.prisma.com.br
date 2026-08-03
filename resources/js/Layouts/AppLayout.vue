@@ -249,6 +249,7 @@ const navigationConfig = [
                     { label: 'Configurações do Sistema', route: 'settings.system', icon: 'fa-solid fa-gears' },
                     { label: 'Minha Conta', route: 'settings.account', icon: 'fa-solid fa-user-gear' },
                     { label: 'Config. de Canais', route: 'pricing.channels', icon: 'fa-solid fa-sliders' },
+                    { label: 'Contas por Canal', route: 'sales.channel-accounts.index', icon: 'fa-solid fa-store' },
                 ],
             },
             {
@@ -267,6 +268,11 @@ const navigationConfig = [
                 label: 'Importações de Vendas',
                 items: [
                     { label: 'Vendas Diárias por Canal', route: 'sales.channel-import.show', icon: 'fa-solid fa-calendar-days' },
+                    { label: 'Vendas Mercado Livre', route: 'order-channel.show', params: { type: 'mercado_livre' }, icon: 'fa-solid fa-cart-shopping' },
+                    { label: 'Vendas Shopee', route: 'order-channel.show', params: { type: 'shopee' }, icon: 'fa-solid fa-bag-shopping' },
+                    { label: 'Vendas Centauro', route: 'order-channel.show', params: { type: 'centauro' }, icon: 'fa-solid fa-shirt' },
+                    { label: 'Vendas Renner', route: 'order-channel.show', params: { type: 'renner' }, icon: 'fa-solid fa-store' },
+                    { label: 'Vendas Magazine Luiza', route: 'order-channel.show', params: { type: 'magalu' }, icon: 'fa-solid fa-cart-shopping' },
                 ],
             },
             {
