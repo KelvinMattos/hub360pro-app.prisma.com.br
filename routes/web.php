@@ -268,6 +268,12 @@ Route::middleware(['auth'])->group(function () {
                     ->whereIn('type', ['google_ads', 'meta_ads'])->name('import');
                 Route::get('/progress/{token}', [\App\Http\Controllers\Ads\AdsImportController::class, 'progress'])->name('progress');
             });
+
+            // Contas de Google Ads conectadas via API (OAuth em Conexões) — toggle/remoção reaproveitam
+            // marketplaces.accounts.toggle/destroy (genéricos sobre `integrations`, já usados pro ML).
+            Route::prefix('google-connections')->name('google.')->group(function () {
+                Route::post('/{account}/sync', [\App\Http\Controllers\Ads\GoogleAdsConnectionController::class, 'syncNow'])->name('sync-now');
+            });
         });
 
         // Pedidos e Etiquetas (atrás de feature flag — ver config/features.php)
@@ -315,6 +321,10 @@ Route::middleware(['auth'])->group(function () {
         )->name('settings.logs');
         Route::get('/ml/connect', [SettingsController::class , 'redirectToMeli'])->name('ml.connect');
         Route::get('/ml/callback', [SettingsController::class , 'handleMeliCallback'])->name('ml.callback');
+
+        Route::post('/settings/google-ads/keys', [SettingsController::class, 'updateGoogleAdsKeys'])->name('settings.google-ads.keys');
+        Route::get('/google-ads/connect', [SettingsController::class, 'redirectToGoogleAds'])->name('google-ads.connect');
+        Route::get('/google-ads/callback', [SettingsController::class, 'handleGoogleAdsCallback'])->name('google-ads.callback');
 
         // Módulo Hub 360 PRO — Marketplace & Omnichannel
         Route::prefix('marketplaces')->name('marketplaces.')->group(function () {

@@ -26,8 +26,13 @@ class SettingsController extends Controller
     {
         $company = Auth::user()->company;
         
-        // Configurações de chaves por plataforma
+        // Configurações de chaves por plataforma — prioriza a linha "de
+        // config" (sem seller_id/conta ainda) na keyBy, senão plataformas com
+        // mais de uma conta conectada (ex.: Google Ads com múltiplos
+        // Customer ID) podiam fazer o keyBy pegar uma conta ao acaso em vez
+        // da linha com as chaves.
         $integrations = $company->integrations()
+            ->orderByRaw('seller_id IS NULL DESC')
             ->orderByRaw('app_id IS NULL ASC')
             ->get()
             ->keyBy('platform');
@@ -158,6 +163,140 @@ class SettingsController extends Controller
 
         Log::error("Erro OAuth ML: " . $response->body());
         return redirect()->route('marketplaces.accounts.index')->with('error', 'Falha ao conectar: ' . ($response->json()['message'] ?? 'Erro desconhecido'));
+    }
+
+    /**
+     * Salva Developer Token + Client ID/Secret do Google Ads (pedido do
+     * cliente 04/08/2026 — integração real via API, não upload). Mesmo
+     * desenho de updateKeys(), com o campo a mais que só o Google Ads exige.
+     */
+    public function updateGoogleAdsKeys(Request $request)
+    {
+        $request->validate([
+            'developer_token' => ['required', 'string'],
+            'app_id' => ['required', 'string'], // Client ID (OAuth2)
+            'client_secret' => ['required', 'string'],
+            'login_customer_id' => ['nullable', 'string'],
+        ]);
+
+        $integration = Integration::where('company_id', Auth::user()->company_id)
+            ->where('platform', Integration::PLATFORM_GOOGLE_ADS)
+            ->whereNull('seller_id') // linha de configuração (sem conta ainda), distinta das contas já conectadas
+            ->first();
+
+        $payload = [
+            'company_id' => Auth::user()->company_id,
+            'platform' => Integration::PLATFORM_GOOGLE_ADS,
+            'developer_token' => $request->developer_token,
+            'app_id' => $request->app_id,
+            'client_secret' => $request->client_secret,
+            'login_customer_id' => $request->login_customer_id,
+            'status' => 'pending_auth',
+        ];
+
+        if ($integration) {
+            $integration->update($payload);
+        } else {
+            Integration::create($payload);
+        }
+
+        return redirect()->back()->with('success', 'Credenciais do Google Ads salvas. Agora clique em "Autorizar".');
+    }
+
+    public function redirectToGoogleAds()
+    {
+        $integration = Integration::where('company_id', Auth::user()->company_id)
+            ->where('platform', Integration::PLATFORM_GOOGLE_ADS)
+            ->whereNull('seller_id')
+            ->first();
+
+        if (!$integration || !$integration->developer_token || !$integration->app_id || !$integration->client_secret) {
+            return redirect()->route('settings.integrations')->with('error', 'Preencha e salve o Developer Token, Client ID e Client Secret antes de autorizar.');
+        }
+
+        $service = new \App\Services\GoogleAds\GoogleAdsApiService();
+        $url = $service->authorizationUrl($integration->app_id, route('google-ads.callback'), (string) $integration->id);
+
+        return Inertia::location($url);
+    }
+
+    public function handleGoogleAdsCallback(Request $request, \App\Services\GoogleAds\GoogleAdsApiService $service)
+    {
+        $code = $request->query('code');
+        $state = $request->query('state');
+        $error = $request->query('error');
+
+        if ($error) {
+            return redirect()->route('settings.integrations')->with('error', 'Autorização do Google Ads cancelada: ' . $error);
+        }
+        if (!$code || !$state) {
+            return redirect()->route('settings.integrations')->with('error', 'Autorização do Google Ads cancelada.');
+        }
+
+        $config = Integration::find($state);
+        if (!$config || $config->platform !== Integration::PLATFORM_GOOGLE_ADS) {
+            return redirect()->route('settings.integrations')->with('error', 'Configuração do Google Ads não encontrada — salve as credenciais de novo e tente autorizar novamente.');
+        }
+
+        try {
+            $tokens = $service->exchangeCode($config->app_id, $config->client_secret, $code, route('google-ads.callback'));
+        } catch (\Throwable $e) {
+            return redirect()->route('settings.integrations')->with('error', 'Falha ao conectar com o Google Ads: ' . $e->getMessage());
+        }
+
+        // Grava o token na linha de config pra já poder chamar a API e listar as contas acessíveis.
+        $config->forceFill([
+            'access_token' => $tokens['access_token'],
+            'refresh_token' => $tokens['refresh_token'] ?? $config->refresh_token, // Google só devolve refresh_token na 1ª autorização com prompt=consent
+            'token_expires_at' => now()->addSeconds((int) ($tokens['expires_in'] ?? 3600)),
+            'expires_at' => now()->addSeconds((int) ($tokens['expires_in'] ?? 3600)),
+        ])->save();
+
+        if (!$config->refresh_token) {
+            return redirect()->route('settings.integrations')->with('error', 'Google não devolveu um refresh_token — desconecte o app em myaccount.google.com/permissions e autorize de novo.');
+        }
+
+        try {
+            $customerIds = $service->listAccessibleCustomers($config);
+        } catch (\Throwable $e) {
+            Log::error('Google Ads: falha ao listar contas acessíveis: ' . $e->getMessage());
+            return redirect()->route('settings.integrations')->with('error', 'Conectado, mas falhou ao listar as contas do Google Ads: ' . $e->getMessage());
+        }
+
+        if (empty($customerIds)) {
+            return redirect()->route('settings.integrations')->with('error', 'Conectado, mas nenhuma conta de Google Ads acessível foi encontrada para esse login.');
+        }
+
+        $connected = 0;
+        foreach ($customerIds as $customerId) {
+            $name = $service->fetchCustomerName($config, $customerId);
+
+            Integration::updateOrCreate(
+                [
+                    'company_id' => $config->company_id,
+                    'platform' => Integration::PLATFORM_GOOGLE_ADS,
+                    'seller_id' => $customerId,
+                ],
+                [
+                    'app_id' => $config->app_id,
+                    'client_secret' => $config->client_secret,
+                    'developer_token' => $config->developer_token,
+                    'login_customer_id' => $config->login_customer_id,
+                    'access_token' => $config->access_token,
+                    'refresh_token' => $config->refresh_token,
+                    'token_expires_at' => $config->token_expires_at,
+                    'expires_at' => $config->expires_at,
+                    'external_user_id' => $customerId,
+                    'external_nickname' => $name,
+                    'account_nickname' => $name ?: $customerId,
+                    'status' => 'active',
+                    'is_active' => true,
+                ]
+            );
+            $connected++;
+        }
+
+        return redirect()->route('settings.integrations')->with('success', "Google Ads conectado! {$connected} conta(s) encontrada(s).");
     }
 
     public function updateFinance(Request $request)

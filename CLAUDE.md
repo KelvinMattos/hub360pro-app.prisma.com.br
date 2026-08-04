@@ -208,6 +208,48 @@ requisições server-side, com qualquer conjunto de headers. O scraper direto fi
 **desligado por padrão**. Fonte oficial = relatório de Buy Box do Seller Center /
 API autorizada / planilha.
 
+### 5.3 Google Ads API (integração real, 04/08/2026)
+
+Pedido do cliente: nada de upload de planilha pra ADS — integração de verdade via
+API, cruzando gasto de campanha com a origem real da venda (UTM, ver §... módulo
+Monitoramento de ADS). Implementado em `App\Services\GoogleAds\GoogleAdsApiService`
++ `google-ads:sync-spend` (cron hourly) + fluxo OAuth2 em `SettingsController`.
+
+- **REST, não gRPC.** A lib oficial `google-ads-php` usa gRPC por padrão, que
+  exige a extensão `grpc` do PHP — não garantida em cPanel compartilhado. A
+  Google Ads API também expõe uma interface **REST** documentada e suportada
+  oficialmente (`https://googleads.googleapis.com/v{versão}/...`), que funciona
+  com o `Http` facade do Laravel sem dependência nova. Usamos essa.
+- **Credenciais reaproveitam a tabela `integrations`** (mesmo desenho do
+  Mercado Livre): uma linha "de config" (`seller_id IS NULL`) guarda
+  `developer_token`/`app_id` (= Client ID OAuth)/`client_secret`; uma linha por
+  **Customer ID** conectado (`seller_id` = Customer ID) guarda os tokens depois
+  do OAuth. **Quatro credenciais são exigidas, de três lugares diferentes** —
+  não dá pra simplificar pra "só um token": Developer Token (Google Ads Manager,
+  aprovação da Google), OAuth Client ID + Secret (Google Cloud Console) e
+  Refresh Token (obtido pelo fluxo de consentimento, não digitado à mão).
+- **Versão da API expira em meses, não anos.** A Google descontinua cada versão
+  ~1 ano após o lançamento — em 04/08/2026, v19 (usada como default inicial por
+  engano) já estava **desligada desde fevereiro/2026**; todo request teria
+  falhado. Corrigido pra v24 (`config('services.google_ads.version')`, env
+  `GOOGLE_ADS_API_VERSION`). **Revisar a versão pelo menos a cada 2-3 meses** —
+  https://developers.google.com/google-ads/api/docs/sunset-dates.
+- **`isNearExpiration()` (60 min) dispara refresh quase sempre.** O access
+  token do Google já dura exatamente 60 min — o mesmo método usado pelo
+  Mercado Livre (`Integration::isNearExpiration()`) considera "perto de
+  expirar" qualquer token com menos de 60 min restantes, então um token recém
+  emitido já cai nessa janela. Resultado: toda sincronização faz 1 refresh a
+  mais do que o necessário. Não é um bug fatal (o refresh sempre funciona se o
+  refresh_token for válido), só ineficiente — não "corrigido" aqui pra não
+  mexer no comportamento já em produção do Mercado Livre.
+- **Ambiente de desenvolvimento (sandbox) não alcança `developers.google.com`
+  nem `googleads.googleapis.com`** — mesma política de bloqueio de rede que já
+  vale pra `netshoes.com.br`. O formato de request/response foi montado a
+  partir da documentação pública (via busca, não fetch direto) e os testes
+  usam `Http::fake()` — **nunca houve uma chamada real de ponta a ponta**. A
+  validação de verdade só acontece em produção, com o developer token e as
+  credenciais reais do cliente.
+
 ---
 
 ## 6. Armadilhas conhecidas (Laravel/Inertia)
@@ -295,12 +337,18 @@ Netshoes* (export "Portal").
   PT-BR/EN), mas **não foi validado contra um arquivo real do cliente** ainda —
   ver `App\Http\Controllers\Ads\AdsImportController`. Se algum valor não bater ao
   testar, ajustar os aliases com uma amostra real.
-- **Credenciais de app de desenvolvedor Google Ads (dev token) e Meta (App
-  ID/App Secret)** — pré-requisito pra integração OAuth direta (sincronização
-  automática, sem upload manual). O cliente pediu essa opção (04/08/2026); hoje
-  só existe o card "Aguarda dev token"/"Aguarda App ID/secret" em Conexões,
-  sem fluxo de fato — mesma cautela do cliente HTTP Netshoes: não implementar
-  chutando um contrato de API que a gente não tem como testar.
+- **Google Ads: integração real via API implementada** (04/08/2026, ver §5.3) —
+  Conexões tem o card funcional (Developer Token + Client ID/Secret + botão
+  "Autorizar via Google"), `google-ads:sync-spend` roda a cada hora. **Falta
+  só a validação em produção** com as credenciais reais do cliente (o sandbox
+  de dev não alcança a API do Google — ver §5.3) — testar o fluxo de ponta a
+  ponta (salvar chaves → autorizar → conferir se `ad_spend_daily` populou) é o
+  próximo passo, não desenvolvimento adicional.
+- **Meta Ads: só importação manual ainda.** A integração direta via API
+  (Meta Marketing API) depende do cliente criar um App ID/App Secret no Meta
+  for Developers — mesma cautela do cliente HTTP Netshoes: não implementar
+  chutando um contrato de API que a gente não tem como testar. Card "Aguarda
+  App ID/secret" em Conexões.
 
 ### Roadmap Hooklab
 | # | Item | Estado |

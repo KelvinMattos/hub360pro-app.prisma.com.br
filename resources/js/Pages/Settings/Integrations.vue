@@ -44,6 +44,7 @@
                                 <!-- Platform Decorate -->
                                 <div class="absolute right-[-10%] top-[-10%] opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
                                      <i v-if="account.platform === 'mercadolivre'" class="fa-solid fa-handshake text-[120px] -rotate-12"></i>
+                                     <i v-else-if="account.platform === 'google_ads'" class="fa-brands fa-google text-[120px] -rotate-12"></i>
                                 </div>
 
                                 <div class="relative z-10">
@@ -55,6 +56,7 @@
                                                 </div>
                                                 <div class="absolute -right-1 -bottom-1 w-6 h-6 rounded-lg bg-white border border-black/5 flex items-center justify-center">
                                                     <i v-if="account.platform === 'mercadolivre'" class="fa-solid fa-handshake text-[#FFE600] text-[10px]"></i>
+                                                    <i v-else-if="account.platform === 'google_ads'" class="fa-brands fa-google text-blue-500 text-[10px]"></i>
                                                 </div>
                                             </div>
                                             <div>
@@ -172,6 +174,99 @@
                                 </form>
                             </div>
 
+                            <!-- Google Ads API Config Card -->
+                            <div class="bg-white rounded-[2.5rem] p-10 border border-black/5 shadow-premium overflow-hidden relative">
+                                <div class="absolute right-0 top-0 p-12 opacity-[0.02] pointer-events-none">
+                                     <i class="fa-brands fa-google text-[160px]"></i>
+                                </div>
+
+                                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-8 mb-10 relative z-10">
+                                    <div class="flex items-center gap-5">
+                                        <div class="w-16 h-16 rounded-3xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shadow-lg">
+                                            <i class="fa-brands fa-google text-blue-500 text-3xl"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-2xl font-black text-slate-800 tracking-tight">Google Ads API</h3>
+                                            <div class="flex items-center gap-2 mt-1">
+                                                <span v-if="integrations.google_ads?.status === 'active' || googleAdsAccounts.length" class="flex items-center gap-1.5 text-[10px] font-black text-emerald-500 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-500/10 uppercase tracking-widest">
+                                                    <i class="fa-solid fa-circle-check"></i> Conectado
+                                                </span>
+                                                <span v-else class="flex items-center gap-1.5 text-[10px] font-black text-amber-500 bg-amber-50 px-3 py-1 rounded-full border border-amber-500/10 uppercase tracking-widest">
+                                                    <i class="fa-solid fa-circle-exclamation"></i> Não conectado
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex gap-3">
+                                         <a v-if="integrations.google_ads?.app_id" :href="route('google-ads.connect')" class="bg-blue-500 hover:bg-blue-500/90 text-white px-8 py-4 rounded-full font-black uppercase tracking-[0.1em] text-xs transition-all shadow-xl shadow-blue-500/20 active:scale-95 flex items-center gap-3">
+                                            <i class="fa-solid fa-link animate-bounce-horizontal"></i>
+                                            Autorizar via Google
+                                        </a>
+                                        <button v-else class="bg-slate-100 text-slate-400 px-8 py-4 rounded-full font-black uppercase tracking-widest text-xs cursor-not-allowed opacity-50">
+                                            Configure as Chaves Primeiro
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <form @submit.prevent="saveGoogleAdsKeys" class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+                                    <div class="space-y-3">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center gap-2">
+                                            <i class="fa-solid fa-key"></i> Developer Token
+                                        </label>
+                                        <input v-model="googleAdsForm.developer_token" type="password" class="w-full bg-slate-50 border border-black/5 focus:border-blue-500 focus:bg-white text-slate-800 rounded-3xl py-4 px-8 font-bold transition-all outline-none placeholder:text-slate-300" placeholder="••••••••••••••••••••••">
+                                    </div>
+                                    <div class="space-y-3">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center gap-2">
+                                            <i class="fa-solid fa-id-badge"></i> OAuth Client ID
+                                        </label>
+                                        <input v-model="googleAdsForm.app_id" type="password" class="w-full bg-slate-50 border border-black/5 focus:border-blue-500 focus:bg-white text-slate-800 rounded-3xl py-4 px-8 font-bold transition-all outline-none placeholder:text-slate-300" placeholder="••••••••••••••••">
+                                    </div>
+                                    <div class="space-y-3">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center gap-2">
+                                            <i class="fa-solid fa-shield-halved"></i> OAuth Client Secret
+                                        </label>
+                                        <input v-model="googleAdsForm.client_secret" type="password" class="w-full bg-slate-50 border border-black/5 focus:border-blue-500 focus:bg-white text-slate-800 rounded-3xl py-4 px-8 font-bold transition-all outline-none placeholder:text-slate-300" placeholder="••••••••••••••••">
+                                    </div>
+                                    <div class="space-y-3">
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center gap-2">
+                                            <i class="fa-solid fa-sitemap"></i> Login Customer ID (opcional, se usa MCC)
+                                        </label>
+                                        <input v-model="googleAdsForm.login_customer_id" type="text" class="w-full bg-slate-50 border border-black/5 focus:border-blue-500 focus:bg-white text-slate-800 rounded-3xl py-4 px-8 font-bold transition-all outline-none placeholder:text-slate-300" placeholder="123-456-7890">
+                                    </div>
+
+                                    <div class="md:col-span-2 flex justify-end mt-4">
+                                        <button type="submit" :disabled="googleAdsForm.processing" class="bg-blue-600 hover:bg-blue-500 text-white px-10 py-4 rounded-full font-black uppercase tracking-[0.2em] text-xs transition-all shadow-2xl shadow-blue-600/30 active:scale-95 disabled:opacity-50">
+                                            {{ googleAdsForm.processing ? 'Salvando...' : 'Salvar Credenciais' }}
+                                        </button>
+                                    </div>
+                                </form>
+
+                                <!-- Contas conectadas + status de sincronização -->
+                                <div v-if="googleAdsAccounts.length" class="mt-8 pt-8 border-t border-black/[0.03] relative z-10 space-y-3">
+                                    <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Contas sincronizando</h4>
+                                    <div v-for="acc in googleAdsAccounts" :key="acc.id" class="flex items-center justify-between bg-slate-50 rounded-2xl px-6 py-4">
+                                        <div>
+                                            <div class="text-sm font-black text-slate-700">{{ acc.account_nickname || acc.external_user_id }}</div>
+                                            <div class="text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-0.5">
+                                                <template v-if="acc.last_sync_status === 'ok'">
+                                                    <span class="text-emerald-500"><i class="fa-solid fa-circle-check"></i> Sincronizado {{ formatDate(acc.last_sync_at) }}</span>
+                                                </template>
+                                                <template v-else-if="acc.last_sync_status === 'error'">
+                                                    <span class="text-red-500"><i class="fa-solid fa-circle-exclamation"></i> Falhou {{ formatDate(acc.last_sync_at) }} — {{ acc.last_sync_error }}</span>
+                                                </template>
+                                                <template v-else>
+                                                    <span class="text-slate-400">Aguardando 1ª sincronização (roda a cada hora)</span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                        <button @click="syncGoogleAdsNow(acc)" class="bg-white border border-black/5 text-slate-500 hover:text-blue-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm">
+                                            <i class="fa-solid fa-rotate mr-1.5"></i> Sincronizar agora
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Upcoming Platforms -->
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-40 grayscale pointer-events-none">
                                 <div class="bg-white rounded-[2rem] p-8 border border-black/5 flex items-center gap-5">
@@ -194,15 +289,6 @@
                                 </div>
                                 <div class="bg-white rounded-[2rem] p-8 border border-black/5 flex items-center gap-5">
                                     <div class="w-14 h-14 rounded-2xl bg-black/5 flex items-center justify-center border border-black/5 shadow-md">
-                                        <i class="fa-brands fa-google text-slate-800 text-2xl"></i>
-                                    </div>
-                                    <div>
-                                        <h4 class="text-sm font-black text-slate-800">Google Ads API</h4>
-                                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded-full">Aguarda dev token</span>
-                                    </div>
-                                </div>
-                                <div class="bg-white rounded-[2rem] p-8 border border-black/5 flex items-center gap-5">
-                                    <div class="w-14 h-14 rounded-2xl bg-black/5 flex items-center justify-center border border-black/5 shadow-md">
                                         <i class="fa-brands fa-meta text-slate-800 text-2xl"></i>
                                     </div>
                                     <div>
@@ -212,10 +298,9 @@
                                 </div>
                             </div>
                             <p class="text-[11px] text-slate-400 font-semibold leading-relaxed mt-4">
-                                Google Ads e Meta Ads já têm importação manual de gasto disponível em <span class="text-slate-600">ADS → Importar</span>.
-                                A integração direta via API (sincronização automática, sem upload) depende de você criar um app de desenvolvedor
-                                em cada plataforma (Google Ads: developer token; Meta: App ID/App Secret) e nos passar essas credenciais aqui —
-                                não implementamos chutando um contrato que não existe.
+                                Meta Ads ainda só tem importação manual de gasto, em <span class="text-slate-600">ADS → Importar</span>. A
+                                integração direta via API do Meta depende de você criar um App ID/App Secret no Meta for Developers e nos
+                                passar essas credenciais — não implementamos chutando um contrato que não existe.
                             </p>
                         </div>
                     </section>
@@ -287,7 +372,7 @@
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue';
+import { reactive, watch, computed } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -303,6 +388,15 @@ const meliForm = useForm({
     client_secret: '' // Never show back
 });
 
+// Google Ads API — pedido do cliente 04/08/2026 (integração real, não upload).
+const googleAdsForm = useForm({
+    developer_token: '', // hidden no backend (Integration::$hidden) — nunca volta pro front, igual client_secret
+    app_id: props.integrations.google_ads?.app_id || '',
+    client_secret: '',
+    login_customer_id: props.integrations.google_ads?.login_customer_id || '',
+});
+const googleAdsAccounts = computed(() => props.credentials.filter(c => c.platform === 'google_ads'));
+
 // Financial Rules Form
 const financeForm = useForm({
     tax_rate: props.company.tax_rate || 0,
@@ -314,6 +408,12 @@ watch(() => props.integrations, (newVal) => {
     if (newVal.mercadolibre) {
         meliForm.app_id = newVal.mercadolibre.app_id || '';
     }
+    if (newVal.google_ads) {
+        googleAdsForm.app_id = newVal.google_ads.app_id || '';
+        googleAdsForm.login_customer_id = newVal.google_ads.login_customer_id || '';
+        // developer_token/client_secret ficam hidden no backend (Integration::$hidden) —
+        // não recarrega por cima do que o usuário já digitou.
+    }
 }, { deep: true });
 
 const saveKeys = (platform) => {
@@ -323,6 +423,17 @@ const saveKeys = (platform) => {
             // Success feedback managed by AppLayout flash
         }
     });
+};
+
+const saveGoogleAdsKeys = () => {
+    googleAdsForm.post(route('settings.google-ads.keys'), {
+        preserveScroll: true,
+        onSuccess: () => { googleAdsForm.client_secret = ''; },
+    });
+};
+
+const syncGoogleAdsNow = (account) => {
+    router.post(route('ads.google.sync-now', account.id), {}, { preserveScroll: true });
 };
 
 const saveFinance = () => {

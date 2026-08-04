@@ -18,6 +18,7 @@ class Integration extends Model
      * exato só enxergava metade das integrações.
      */
     public const PLATFORM_MERCADO_LIVRE = 'mercadolibre';
+    public const PLATFORM_GOOGLE_ADS = 'google_ads';
 
     protected $fillable = [
         'company_id',
@@ -35,6 +36,11 @@ class Integration extends Model
         'redirect_uri',
         'app_id',
         'client_secret',
+        'developer_token',
+        'login_customer_id',
+        'last_sync_at',
+        'last_sync_status',
+        'last_sync_error',
         'status',
         'reputation_level',
         'power_seller_status',
@@ -52,11 +58,13 @@ class Integration extends Model
         'client_secret',
         'access_token',
         'refresh_token',
+        'developer_token',
     ];
 
     protected $casts = [
         'token_expires_at' => 'datetime',
         'expires_at' => 'datetime',
+        'last_sync_at' => 'datetime',
         'participates_in_program' => 'boolean',
         'auto_fetch_fees' => 'boolean',
         'commission_percent' => 'float',
