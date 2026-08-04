@@ -21,11 +21,13 @@ use Inertia\Inertia;
  *   - Estoque              -> products.stock_quantity   (chave: SKU/Código Der.)
  *   - Custos de Produtos   -> products.cost_price        (chave: Código)
  *   - Preços de Venda      -> products.sale_price        (chave: Código)
+ *   - Inventário Geral     -> products.cost_price + stock_quantity (chave: COD)
  *   - Vendas               -> orders                     (chave: Pedido Id/external_id)
  *
- * Todo o parsing acontece por streaming (generator nativo com fgetcsv) e as
- * escritas são feitas em transação, para suportar arquivos grandes (dezenas de
- * milhares de linhas) sem estourar memória.
+ * Todo o parsing acontece por streaming (generator nativo com fgetcsv, ou
+ * openspout pro modelo .xlsx de Inventário Geral) e as escritas são feitas em
+ * transação, para suportar arquivos grandes (dezenas de milhares de linhas)
+ * sem estourar memória.
  */
 class MagazordImportController extends Controller
 {
@@ -59,6 +61,16 @@ class MagazordImportController extends Controller
             'value_label' => 'Site (preço base) · Custo · Estoque',
             'description' => 'Modelo "Consulta Dinâmica – Custo x Preço de Venda": atualiza o preço de venda (base = coluna "Site", ou o maior preço entre os canais), o custo e o estoque de uma vez, cruzando pelo Código. Também aceita um modelo simples com Produto Código / Preço Venda.',
             'columns' => ['Código', 'Produto', 'Marca', 'Custo', 'Estoque', 'Site', 'Shopee', 'Mercado Livre', 'Centauro', 'Via Varejo', 'Magalu', 'Dafiti', 'Amazon', 'Netshoes', 'Ativo'],
+            'can_create' => true,
+        ],
+        'inventario' => [
+            'title' => 'Importar Inventário Geral',
+            'icon' => 'fa-solid fa-warehouse',
+            'target' => 'products.cost_price + stock_quantity',
+            'key_label' => 'COD',
+            'value_label' => 'CUSTO UNR (custo unitário) · QUANTIDADE (estoque, somado por tamanho)',
+            'description' => 'Modelo de contagem física geral, em .xlsx: COD, NCM, Descrição, TAM, Quantidade, Unid, Custo Unr, Custo R$. Cruza pelo COD. Usa CUSTO UNR (custo por unidade) — NUNCA CUSTO R$, que nessa planilha é CUSTO UNR × Quantidade daquela linha (a soma parcial, não o custo de uma unidade). O mesmo COD aparece em várias linhas, uma por tamanho: o estoque gravado é a soma da Quantidade de todas as linhas do código. NCM/TAM/UNID não são gravados (sem campo correspondente no cadastro).',
+            'columns' => ['COD', 'NCM', 'Descrição do Produto', 'TAM', 'Quantidade', 'Unid', 'Custo Unr', 'Custo R$'],
             'can_create' => true,
         ],
         'descontos' => [
@@ -191,10 +203,10 @@ class MagazordImportController extends Controller
         abort_unless(isset(self::TYPES[$type]), 404);
 
         $request->validate([
-            'file' => 'required|file|mimes:csv,txt|max:102400', // 100 MB
+            'file' => 'required|file|mimes:csv,txt,xlsx|max:102400', // 100 MB
             'create_missing' => 'sometimes|boolean',
         ], [
-            'file.mimes' => 'Envie o arquivo em formato .csv. Se o Magazord exportou .xls, reexporte como CSV (o .xls do Magazord costuma vir como HTML e não pode ser lido).',
+            'file.mimes' => 'Envie o arquivo em formato .csv (ou .xlsx, no caso do Inventário Geral). Se o Magazord exportou .xls, reexporte como CSV (o .xls do Magazord costuma vir como HTML e não pode ser lido).',
         ]);
 
         // Arquivos grandes (dezenas de milhares de linhas) podem levar minutos —
@@ -204,26 +216,35 @@ class MagazordImportController extends Controller
 
         $path = $request->file('file')->getRealPath();
         $createMissing = (bool) $request->boolean('create_missing');
+        $isXlsx = strtolower((string) $request->file('file')->getClientOriginalExtension()) === 'xlsx';
 
-        // Rejeita o .xls do Magazord que na verdade vem como HTML (erro de export).
-        $head = @file_get_contents($path, false, null, 0, 64);
-        if ($head !== false && stripos($head, '<html') !== false) {
-            return redirect()->route('magazord.show', ['type' => $type])
-                ->with('error', 'O arquivo enviado é um HTML (provável erro de exportação do Magazord), não uma planilha. Reexporte o relatório como CSV e tente novamente.');
+        if (!$isXlsx) {
+            // Rejeita o .xls do Magazord que na verdade vem como HTML (erro de export).
+            $head = @file_get_contents($path, false, null, 0, 64);
+            if ($head !== false && stripos($head, '<html') !== false) {
+                return redirect()->route('magazord.show', ['type' => $type])
+                    ->with('error', 'O arquivo enviado é um HTML (provável erro de exportação do Magazord), não uma planilha. Reexporte o relatório como CSV e tente novamente.');
+            }
         }
 
         // Progresso ao vivo: token vindo do frontend + total de linhas do arquivo.
-        $this->initProgress((string) $request->input('progress_token', '') ?: null, $this->countRows($path));
+        $this->initProgress(
+            (string) $request->input('progress_token', '') ?: null,
+            $isXlsx ? $this->countXlsxRows($path) : $this->countRows($path)
+        );
+
+        $records = $isXlsx ? $this->readRowsXlsx($path) : $this->readRows($path);
 
         $summary = match ($type) {
-            'estoque' => $this->importEstoque($this->readRows($path)),
-            'custos' => $this->importCustos($this->readRows($path), $createMissing),
-            'precos' => $this->importPrecos($this->readRows($path), $createMissing),
-            'descontos' => $this->importDescontos($this->readRows($path)),
-            'produtos' => $this->importProdutos($this->readRows($path), $createMissing),
-            'vendas' => $this->importVendas($this->readRows($path), $createMissing),
-            'vendas_itens' => $this->importVendasItens($this->readRows($path), $createMissing),
-            'vendas_detalhes' => $this->importVendasDetalhes($this->readRows($path), $createMissing),
+            'estoque' => $this->importEstoque($records),
+            'custos' => $this->importCustos($records, $createMissing),
+            'precos' => $this->importPrecos($records, $createMissing),
+            'inventario' => $this->importInventario($records, $createMissing),
+            'descontos' => $this->importDescontos($records),
+            'produtos' => $this->importProdutos($records, $createMissing),
+            'vendas' => $this->importVendas($records, $createMissing),
+            'vendas_itens' => $this->importVendasItens($records, $createMissing),
+            'vendas_detalhes' => $this->importVendasDetalhes($records, $createMissing),
         };
 
         $this->writeProgress('done', ['result' => $summary]);
@@ -271,6 +292,85 @@ class MagazordImportController extends Controller
     private function toUtf8(string $v): string
     {
         return mb_check_encoding($v, 'UTF-8') ? $v : mb_convert_encoding($v, 'UTF-8', 'ISO-8859-1');
+    }
+
+    /* ============================================================
+     *  Leitura de XLSX (streaming via openspout) — mesmo formato de
+     *  linha (array associativo cabeçalho => valor) do readRows(), usado
+     *  pelo modelo Inventário Geral (que não vem em CSV).
+     * ============================================================ */
+    private function readRowsXlsx(string $path): \Generator
+    {
+        $reader = new \OpenSpout\Reader\XLSX\Reader();
+        $reader->open($path);
+        try {
+            foreach ($reader->getSheetIterator() as $sheet) {
+                $header = null;
+                foreach ($sheet->getRowIterator() as $row) {
+                    $cells = $row->toArray();
+                    if ($header === null) {
+                        $header = array_map(fn ($h) => trim((string) $h), $cells);
+                        continue;
+                    }
+                    $assoc = []; $empty = true;
+                    foreach ($header as $i => $h) {
+                        if ($h === '') continue;
+                        $val = $cells[$i] ?? null;
+                        if ($val !== null && $val !== '') $empty = false;
+                        $assoc[$h] = $this->xlsxCellToString($val);
+                    }
+                    if (!$empty) yield $assoc;
+                }
+                break; // só a primeira aba
+            }
+        } finally {
+            $reader->close();
+        }
+    }
+
+    /**
+     * Converte uma célula do XLSX pro mesmo formato de string BR (vírgula decimal)
+     * que brNumber() espera receber de um CSV do Magazord. O openspout devolve
+     * célula numérica como float/int nativo do PHP (ponto decimal) — sem essa
+     * conversão, brNumber() removeria o ponto como se fosse separador de milhar
+     * (390.66 viraria 39066, 20% a mais que o valor real gravado como custo).
+     */
+    private function xlsxCellToString($val): ?string
+    {
+        if ($val === null) return null;
+        if (is_string($val)) return $val;
+        if ($val instanceof \DateTimeInterface) return $val->format('Y-m-d');
+        if (is_int($val)) return (string) $val;
+        if (is_float($val)) {
+            $formatted = rtrim(rtrim(sprintf('%.4f', $val), '0'), '.');
+            return str_replace('.', ',', $formatted);
+        }
+        return is_scalar($val) ? (string) $val : null;
+    }
+
+    /** Conta linhas de um XLSX sem carregar a planilha inteira (lê a dimensão no XML da aba). */
+    private function countXlsxRows(string $path): int
+    {
+        try {
+            $zip = new \ZipArchive();
+            if ($zip->open($path) !== true) return 0;
+            $sheetName = 'xl/worksheets/sheet1.xml';
+            if ($zip->locateName($sheetName) === false) {
+                for ($i = 0; $i < $zip->numFiles; $i++) {
+                    $nm = $zip->getNameIndex($i);
+                    if (preg_match('#^xl/worksheets/sheet\d+\.xml$#', $nm)) { $sheetName = $nm; break; }
+                }
+            }
+            $fp = $zip->getStream($sheetName);
+            $head = $fp ? fread($fp, 4096) : '';
+            if ($fp) fclose($fp);
+            $zip->close();
+            if (is_string($head) && preg_match('/<dimension\s+ref="[A-Z]+\d+:[A-Z]+(\d+)"/', $head, $m)) {
+                return max(0, (int) $m[1] - 1);
+            }
+        } catch (\Throwable $e) {
+        }
+        return 0;
     }
 
     /** Colunas reais da tabela products (cache por request). */
@@ -416,6 +516,99 @@ class MagazordImportController extends Controller
             'created' => $created,
             'skipped' => $skipped,
             'message' => "Custos importados: {$updated} atualizados, {$created} criados, {$skipped} ignorados (de {$rows} linhas).",
+        ];
+    }
+
+    /* ============================================================
+     *  INVENTÁRIO GERAL -> products.cost_price + stock_quantity
+     *
+     *  Modelo de contagem física (COD/NCM/Descrição/TAM/Quantidade/Unid/
+     *  Custo Unr/Custo R$): uma linha por tamanho, com o mesmo COD repetido
+     *  em todas as linhas do mesmo produto. CUSTO UNR é o custo por unidade
+     *  (constante por COD); CUSTO R$ é CUSTO UNR × QUANTIDADE daquela linha
+     *  — usá-lo como custo gravaria a soma de uma faixa de tamanhos como se
+     *  fosse o preço de uma unidade. Por isso agrega primeiro (soma da
+     *  QUANTIDADE por COD, pega o CUSTO UNR — que não varia entre as linhas
+     *  do mesmo COD) e só então escreve, em lotes.
+     * ============================================================ */
+    private function importInventario(iterable $records, bool $createMissing): array
+    {
+        $companyId = Auth::user()->company_id;
+
+        $agg = []; // sku => ['cost' => ?float, 'qty' => int, 'title' => ?string]
+        $rows = 0;
+        foreach ($records as $row) {
+            $rows++; $this->tick();
+            $sku = $this->col($row, ['COD', 'Código']);
+            if ($sku === null || $sku === '') continue;
+
+            $qty = (int) round($this->brNumber($this->col($row, ['QUANTIDADE'])) ?? 0);
+            $cost = $this->brNumber($this->col($row, ['CUSTO UNR']));
+            $title = $this->col($row, ['DESCRIÇÃO DO PRODUTO', 'Descrição do Produto', 'Descrição']);
+
+            if (!isset($agg[$sku])) {
+                $agg[$sku] = ['cost' => null, 'qty' => 0, 'title' => null];
+            }
+            $agg[$sku]['qty'] += $qty;
+            if ($agg[$sku]['cost'] === null && $cost !== null) {
+                $agg[$sku]['cost'] = $cost;
+            }
+            if ($agg[$sku]['title'] === null && $title !== null && $title !== '') {
+                $agg[$sku]['title'] = $title;
+            }
+        }
+
+        $skuToId = Product::where('company_id', $companyId)
+            ->whereNotNull('sku')->pluck('id', 'sku');
+
+        $updated = 0; $created = 0; $notFound = 0; $skipped = 0;
+        $batch = [];
+        $flush = function () use (&$batch) {
+            if (empty($batch)) return;
+            DB::transaction(function () use ($batch) {
+                foreach ($batch as $item) {
+                    DB::table('products')->where('id', $item['id'])->update($item['payload']);
+                }
+            });
+            $batch = [];
+        };
+
+        try {
+            foreach ($agg as $sku => $data) {
+                $payload = ['stock_quantity' => $data['qty']];
+                if ($data['cost'] !== null && $data['cost'] > 0) {
+                    $payload['cost_price'] = $data['cost'];
+                }
+
+                if ($skuToId->has($sku)) {
+                    $batch[] = ['id' => $skuToId[$sku], 'payload' => $this->prune($payload)];
+                    $updated++;
+                    if (count($batch) >= 500) $flush();
+                } elseif ($createMissing) {
+                    if ($data['cost'] === null && $data['qty'] === 0) { $skipped++; continue; }
+                    $p = Product::create($this->prune(array_merge($payload, [
+                        'company_id' => $companyId,
+                        'sku' => $sku,
+                        'title' => $data['title'] ?: $sku,
+                    ])));
+                    $skuToId[$sku] = $p->id;
+                    $created++;
+                } else {
+                    $notFound++;
+                }
+            }
+            $flush();
+        } catch (\Throwable $e) {
+            return $this->fail($e);
+        }
+
+        return [
+            'ok' => true,
+            'rows' => $rows,
+            'updated' => $updated,
+            'created' => $created,
+            'skipped' => $notFound + $skipped,
+            'message' => "Inventário importado: {$updated} produtos atualizados, {$created} criados, {$notFound} SKUs não encontrados (de {$rows} linhas, " . count($agg) . " códigos únicos). Custo gravado a partir de CUSTO UNR (nunca CUSTO R\$). Estoque = soma da QUANTIDADE de todas as linhas do mesmo código. NCM/TAM/UNID não são gravados (sem campo correspondente no cadastro).",
         ];
     }
 

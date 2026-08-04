@@ -28,23 +28,32 @@
                 (base = coluna <code class="k">Site</code>), este importador também atualiza <b>custo</b> e <b>estoque</b>.
             </div>
 
+            <div v-if="type === 'inventario'" class="bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3 rounded-xl mb-6">
+                <i class="fa-solid fa-triangle-exclamation mr-2"></i>
+                Envie o arquivo em <b>.xlsx</b> (não precisa converter para CSV). O custo é lido da coluna
+                <code class="k">CUSTO UNR</code> — a coluna <code class="k">CUSTO R$</code> <b>não</b> é usada, pois nessa
+                planilha ela é o custo unitário multiplicado pela quantidade daquela linha, não o custo de uma unidade.
+                Um mesmo <code class="k">COD</code> costuma aparecer em várias linhas (uma por tamanho); o estoque
+                gravado é a soma da <code class="k">QUANTIDADE</code> de todas elas.
+            </div>
+
             <div v-if="flash.error" class="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-6">
                 <i class="fa-solid fa-circle-exclamation mr-2"></i>{{ flash.error }}
             </div>
 
             <!-- Formulário de upload -->
             <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                <h2 class="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-4">Enviar arquivo (.csv)</h2>
+                <h2 class="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-4">{{ isXlsxType ? 'Enviar arquivo (.xlsx)' : 'Enviar arquivo (.csv)' }}</h2>
 
                 <label :class="['dz block', form.file ? 'dz-filled' : '']" @dragover.prevent @drop.prevent="onDrop">
                     <div class="flex items-center gap-4">
                         <i :class="form.file ? 'fa-solid fa-file-circle-check text-emerald-500' : 'fa-solid fa-cloud-arrow-up text-slate-400'" class="text-3xl"></i>
                         <div>
-                            <div class="font-semibold text-slate-700">{{ form.file ? form.file.name : 'Clique ou arraste o arquivo CSV aqui' }}</div>
-                            <div class="text-xs text-slate-400 mt-0.5">{{ form.file ? fileSize(form.file.size) : 'Modelo exportado pelo Magazord · latin-1 · separador ";" · até 100 MB' }}</div>
+                            <div class="font-semibold text-slate-700">{{ form.file ? form.file.name : `Clique ou arraste o arquivo ${isXlsxType ? 'XLSX' : 'CSV'} aqui` }}</div>
+                            <div class="text-xs text-slate-400 mt-0.5">{{ form.file ? fileSize(form.file.size) : (isXlsxType ? 'Modelo de contagem física · .xlsx · até 100 MB' : 'Modelo exportado pelo Magazord · latin-1 · separador ";" · até 100 MB') }}</div>
                         </div>
                     </div>
-                    <input type="file" accept=".csv,.txt" class="hidden" @change="onFile">
+                    <input type="file" :accept="isXlsxType ? '.xlsx' : '.csv,.txt'" class="hidden" @change="onFile">
                 </label>
 
                 <div v-if="config.can_create" class="mt-4 flex items-start gap-2">
@@ -167,6 +176,7 @@ const resultData = ref(null);
 let pollTimer = null;
 
 const busy = computed(() => phase.value !== 'idle');
+const isXlsxType = computed(() => props.type === 'inventario');
 const livePct = computed(() => live.value.total ? Math.min(100, Math.round(live.value.done / live.value.total * 100)) : 0);
 const result = computed(() => resultData.value || flash.value.importResult || null);
 
