@@ -192,7 +192,31 @@
                                         <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded-full">In Roadmap</span>
                                     </div>
                                 </div>
+                                <div class="bg-white rounded-[2rem] p-8 border border-black/5 flex items-center gap-5">
+                                    <div class="w-14 h-14 rounded-2xl bg-black/5 flex items-center justify-center border border-black/5 shadow-md">
+                                        <i class="fa-brands fa-google text-slate-800 text-2xl"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="text-sm font-black text-slate-800">Google Ads API</h4>
+                                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded-full">Aguarda dev token</span>
+                                    </div>
+                                </div>
+                                <div class="bg-white rounded-[2rem] p-8 border border-black/5 flex items-center gap-5">
+                                    <div class="w-14 h-14 rounded-2xl bg-black/5 flex items-center justify-center border border-black/5 shadow-md">
+                                        <i class="fa-brands fa-meta text-slate-800 text-2xl"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="text-sm font-black text-slate-800">Meta Marketing API</h4>
+                                        <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 px-2 py-0.5 rounded-full">Aguarda App ID/secret</span>
+                                    </div>
+                                </div>
                             </div>
+                            <p class="text-[11px] text-slate-400 font-semibold leading-relaxed mt-4">
+                                Google Ads e Meta Ads já têm importação manual de gasto disponível em <span class="text-slate-600">ADS → Importar</span>.
+                                A integração direta via API (sincronização automática, sem upload) depende de você criar um app de desenvolvedor
+                                em cada plataforma (Google Ads: developer token; Meta: App ID/App Secret) e nos passar essas credenciais aqui —
+                                não implementamos chutando um contrato que não existe.
+                            </p>
                         </div>
                     </section>
                 </div>

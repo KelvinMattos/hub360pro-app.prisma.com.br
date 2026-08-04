@@ -87,8 +87,8 @@ class MagazordImportController extends Controller
             'target' => 'orders',
             'key_label' => 'Pedido Id',
             'value_label' => 'Valor Total Pedido',
-            'description' => 'Cria/atualiza pedidos, cruzando pelo "Pedido Id" (external_id). Importa cliente, documento, canal, situação, data, desconto, acréscimo (juros de parcelamento) e valores. O arquivo é a nível de pedido (sem itens), então não gera linhas de produto.',
-            'columns' => ['Pedido Id', 'Código', 'Data/Hora', 'Cliente', 'CPF/CNPJ', 'Situação', 'Marketplace', 'Forma de Pagamento', 'Valor Desconto', 'Valor Acréscimo', 'Valor Total Pedido'],
+            'description' => 'Cria/atualiza pedidos, cruzando pelo "Pedido Id" (external_id). Importa cliente, documento, canal, situação, data, desconto, acréscimo (juros de parcelamento), valores e a origem real da venda (UTM: Source/Medium/Campaign/Referência/Dispositivo) — usada pelo Dashboard de ADS para calcular ROAS/CPA por campanha. O arquivo é a nível de pedido (sem itens), então não gera linhas de produto.',
+            'columns' => ['Pedido Id', 'Código', 'Data/Hora', 'Cliente', 'CPF/CNPJ', 'Situação', 'Marketplace', 'Forma de Pagamento', 'Valor Desconto', 'Valor Acréscimo', 'Valor Total Pedido', 'Origem - Source', 'Origem - Medium', 'Origem - Campaign', 'Origem - Referência (site)', 'Origem - Dispositivo'],
             'can_create' => true,
         ],
         'vendas_itens' => [
@@ -684,6 +684,11 @@ class MagazordImportController extends Controller
         $dateCol = $pick(['date_created', 'order_date']);
         $discountCol = $pick(['discount_amount']);
         $surchargeCol = $pick(['surcharge_amount']);
+        $utmSourceCol = $pick(['utm_source']);
+        $utmMediumCol = $pick(['utm_medium']);
+        $utmCampaignCol = $pick(['utm_campaign']);
+        $utmReferrerCol = $pick(['utm_referrer']);
+        $utmDeviceCol = $pick(['utm_device']);
         $hasCompany = in_array('company_id', $cols, true);
         $hasTimestamps = in_array('created_at', $cols, true);
         $hasCustomerId = in_array('customer_id', $cols, true);
@@ -718,6 +723,15 @@ class MagazordImportController extends Controller
                 if ($dateCol)   $payload[$dateCol]   = $this->parseDate($this->col($row, ['Data/Hora', 'Data Aprovação']));
                 if ($discountCol) { $v = $this->brNumber($this->col($row, ['Valor Desconto'])); if ($v !== null) $payload[$discountCol] = $v; }
                 if ($surchargeCol) { $v = $this->brNumber($this->col($row, ['Valor Acréscimo'])); if ($v !== null) $payload[$surchargeCol] = $v; }
+                // Origem real da venda (UTM) — vem só do "Marketplace"
+                // vazio/orgânico do site, "Origem - Pedido" = Site. Em vendas
+                // dos próprios marketplaces essas colunas vêm em branco (o
+                // marketplace não expõe UTM pro seller), o que é esperado.
+                if ($utmSourceCol)   { $v = $this->col($row, ['Origem - Source']); if ($v !== null && $v !== '') $payload[$utmSourceCol] = $v; }
+                if ($utmMediumCol)   { $v = $this->col($row, ['Origem - Medium']); if ($v !== null && $v !== '') $payload[$utmMediumCol] = $v; }
+                if ($utmCampaignCol) { $v = $this->col($row, ['Origem - Campaign']); if ($v !== null && $v !== '') $payload[$utmCampaignCol] = $v; }
+                if ($utmReferrerCol) { $v = $this->col($row, ['Origem - Referência (site)']); if ($v !== null && $v !== '') $payload[$utmReferrerCol] = $v; }
+                if ($utmDeviceCol)   { $v = $this->col($row, ['Origem - Dispositivo']); if ($v !== null && $v !== '') $payload[$utmDeviceCol] = $v; }
 
                 // CPF é a chave que une o mesmo cliente entre canais — ver
                 // CustomerIdentityService. Sem isso, cada importação criava um
