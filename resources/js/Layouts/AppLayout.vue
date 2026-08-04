@@ -252,6 +252,12 @@ const navigationConfig = [
         title: 'Ajustes & Importações',
         groups: [
             {
+                label: 'Central de Importações',
+                items: [
+                    { label: 'Enviar arquivo (detecta o tipo sozinho)', route: 'imports.hub.show', icon: 'fa-solid fa-inbox' },
+                ],
+            },
+            {
                 label: 'Configurações',
                 items: [
                     { label: 'Conexões', route: 'settings.integrations', icon: 'fa-solid fa-plug' },

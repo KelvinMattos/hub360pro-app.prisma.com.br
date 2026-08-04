@@ -145,6 +145,15 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/channels/reset', [\App\Http\Controllers\Pricing\ChannelSettingsController::class , 'reset'])->name('channels.reset');
         });
 
+        // Central de Importações — uma caixa única de upload que detecta o tipo do
+        // arquivo (cabeçalho ou abas) e mostra pra qual tela de importação ele vai.
+        // Só detecta e mostra a confirmação; a gravação de fato acontece na tela
+        // original de cada tipo (magazord.import, order-channel.import, etc.).
+        Route::prefix('imports')->name('imports.hub.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Imports\ImportHubController::class, 'show'])->name('show');
+            Route::post('/detect', [\App\Http\Controllers\Imports\ImportHubController::class, 'detect'])->name('detect');
+        });
+
         // Importações Magazord — alimenta o banco a partir dos modelos exportados pelo Magazord
         Route::prefix('imports/magazord')->name('magazord.')->group(function () {
             Route::get('/{type}', [MagazordImportController::class , 'show'])
