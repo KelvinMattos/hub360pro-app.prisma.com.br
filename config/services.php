@@ -40,6 +40,15 @@ return [
         'redirect' => env('ML_REDIRECT_URI'),
     ],
 
+    // Credenciais do Google Ads (client id/secret/developer token) ficam por
+    // empresa na tabela `integrations` (tela Conexões) — igual ao Mercado
+    // Livre. Aqui só a versão da API, que muda com o tempo (Google
+    // descontinua versões antigas em ~1 ano; ajustar quando a API acusar
+    // "unsupported version").
+    'google_ads' => [
+        'version' => env('GOOGLE_ADS_API_VERSION', 'v24'),
+    ],
+
     'bling' => [
         'client_id' => env('BLING_CLIENT_ID'),
         'client_secret' => env('BLING_CLIENT_SECRET'),
