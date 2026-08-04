@@ -34,15 +34,31 @@
 
                     <!-- Tabelas afetadas -->
                     <div class="mt-5">
-                        <div class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Registros que serão apagados</div>
-                        <div v-if="preview.length" class="grid grid-cols-2 md:grid-cols-3 gap-2">
-                            <div v-for="t in preview" :key="t.table" class="bg-white border border-slate-200 rounded-lg px-3 py-2 flex items-center justify-between">
-                                <span class="text-xs font-mono text-slate-500">{{ t.table }}</span>
-                                <span class="text-sm font-bold" :class="t.count > 0 ? 'text-red-600' : 'text-slate-300'">{{ n(t.count) }}</span>
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="text-xs font-black uppercase tracking-widest text-slate-400">Marque o que deseja apagar</div>
+                            <div v-if="preview.length" class="flex items-center gap-3 text-xs font-semibold">
+                                <button type="button" @click="selectAll" class="text-red-600 hover:underline">Marcar tudo</button>
+                                <button type="button" @click="selectNone" class="text-slate-400 hover:underline">Desmarcar tudo</button>
                             </div>
                         </div>
+                        <div v-if="preview.length" class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            <label v-for="t in preview" :key="t.table"
+                                class="bg-white border border-slate-200 rounded-lg px-3 py-2 flex items-center justify-between gap-2 cursor-pointer has-[:checked]:border-red-300 has-[:checked]:bg-red-50/60">
+                                <span class="flex items-center gap-2 min-w-0">
+                                    <input type="checkbox" :value="t.table" v-model="form.tables" class="accent-red-500 shrink-0">
+                                    <span class="text-xs font-mono text-slate-500 truncate">{{ t.table }}</span>
+                                </span>
+                                <span class="text-sm font-bold shrink-0" :class="t.count > 0 ? 'text-red-600' : 'text-slate-300'">{{ n(t.count) }}</span>
+                            </label>
+                        </div>
                         <p v-else class="text-sm text-slate-400">Nenhum registro para apagar.</p>
-                        <p class="text-sm text-slate-600 mt-3 font-semibold">Total: {{ n(total) }} registros</p>
+                        <p class="text-sm text-slate-600 mt-3 font-semibold">Selecionado: {{ n(selectedTotal) }} de {{ n(total) }} registros</p>
+                        <p class="text-xs text-slate-400 mt-1">
+                            <i class="fa-solid fa-circle-info mr-1"></i>
+                            Tabelas relacionadas (ex.: <code class="font-mono bg-slate-100 text-slate-600 px-1 rounded">orders</code> e
+                            <code class="font-mono bg-slate-100 text-slate-600 px-1 rounded">order_items</code>) costumam precisar ser
+                            apagadas juntas, senão sobra referência órfã.
+                        </p>
                     </div>
 
                     <!-- Confirmação -->
@@ -55,10 +71,11 @@
                                 class="bg-white border border-red-200 text-slate-800 rounded-lg px-3 py-2 font-mono outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 w-64">
                             <button @click="submit" :disabled="!canSubmit || form.processing"
                                 class="bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg px-5 py-2.5 transition disabled:opacity-40 disabled:cursor-not-allowed">
-                                <i class="fa-solid fa-trash-can mr-2"></i>{{ form.processing ? 'Limpando…' : 'Limpar tudo agora' }}
+                                <i class="fa-solid fa-trash-can mr-2"></i>{{ form.processing ? 'Limpando…' : `Limpar ${form.tables.length} selecionado(s)` }}
                             </button>
                         </div>
                         <div v-if="form.errors.confirm" class="text-red-600 text-sm mt-2">{{ form.errors.confirm }}</div>
+                        <div v-if="form.errors.tables" class="text-red-600 text-sm mt-2">{{ form.errors.tables }}</div>
                     </div>
 
                     <!-- Ordem de importação -->
@@ -90,12 +107,16 @@ const props = defineProps({
 });
 
 const total = computed(() => props.preview.reduce((s, t) => s + (t.count || 0), 0));
-const form = useForm({ confirm: '' });
-const canSubmit = computed(() => form.confirm.trim() === props.confirmPhrase);
+const form = useForm({ confirm: '', tables: props.preview.map(t => t.table) });
+const selectedTotal = computed(() => props.preview.reduce((s, t) => s + (form.tables.includes(t.table) ? (t.count || 0) : 0), 0));
+const canSubmit = computed(() => form.confirm.trim() === props.confirmPhrase && form.tables.length > 0);
+
+function selectAll() { form.tables = props.preview.map(t => t.table); }
+function selectNone() { form.tables = []; }
 
 function submit() {
     if (!canSubmit.value) return;
-    if (!confirm('Última confirmação: apagar TODOS os produtos e vendas? Não há como desfazer.')) return;
+    if (!confirm(`Última confirmação: apagar ${form.tables.length} tabela(s) selecionada(s) (${n(selectedTotal.value)} registros)? Não há como desfazer.`)) return;
     form.post(route('settings.system.reset_catalog'), {
         preserveScroll: true,
         onSuccess: () => form.reset('confirm'),

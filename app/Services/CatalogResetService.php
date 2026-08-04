@@ -34,10 +34,21 @@ class CatalogResetService
         return $out;
     }
 
-    /** Executa a limpeza. Retorna a lista de tabelas esvaziadas com o total removido. */
-    public function reset(?string $actor = null): array
+    /**
+     * Executa a limpeza. $tables filtra quais tabelas apagar (subconjunto de
+     * $this->tables, vindo dos checkboxes da Zona de Perigo); null apaga
+     * todas (comportamento do comando CLI). Sempre filtra contra a lista
+     * conhecida em $this->tables — nunca confia em nome de tabela vindo
+     * direto do request.
+     *
+     * Retorna a lista de tabelas esvaziadas com o total removido.
+     */
+    public function reset(?string $actor = null, ?array $tables = null): array
     {
         $preview = $this->preview();
+        if ($tables !== null) {
+            $preview = array_values(array_filter($preview, fn ($row) => in_array($row['table'], $tables, true)));
+        }
         $total = array_sum(array_column($preview, 'count'));
 
         Schema::disableForeignKeyConstraints();

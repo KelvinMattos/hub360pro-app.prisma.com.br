@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\CatalogResetService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -33,6 +34,11 @@ class SystemSettingsController extends Controller
     {
         $data = $request->validate([
             'confirm' => 'required|string',
+            'tables' => 'required|array|min:1',
+            'tables.*' => ['string', Rule::in($this->reset->tables)],
+        ], [
+            'tables.required' => 'Selecione pelo menos um registro para apagar.',
+            'tables.min' => 'Selecione pelo menos um registro para apagar.',
         ]);
 
         if (trim($data['confirm']) !== self::CONFIRM_PHRASE) {
@@ -42,8 +48,9 @@ class SystemSettingsController extends Controller
         }
 
         $actor = Auth::user()?->email ?? 'desconhecido';
-        $result = $this->reset->reset($actor);
+        $result = $this->reset->reset($actor, $data['tables']);
 
-        return back()->with('success', "Limpeza concluída: {$result['total']} registros removidos. Pode recomeçar as importações.");
+        $tableCount = count($result['tables']);
+        return back()->with('success', "Limpeza concluída: {$result['total']} registros removidos em {$tableCount} tabela(s) selecionada(s). Pode recomeçar as importações.");
     }
 }
