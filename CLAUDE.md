@@ -289,6 +289,18 @@ Netshoes* (export "Portal").
   aliases de coluna do importador.
 - **Docs da API de seller Netshoes/Magalu** — o cliente HTTP **não foi implementado
   de propósito**: sem o contrato real seria chute.
+- **Amostra real de export de campanha do Google Ads / Meta Ads Manager** — o
+  módulo de ADS (04/08/2026) tem importação manual funcionando com parser
+  defensivo (procura a linha de cabeçalho, aceita os nomes de coluna mais comuns
+  PT-BR/EN), mas **não foi validado contra um arquivo real do cliente** ainda —
+  ver `App\Http\Controllers\Ads\AdsImportController`. Se algum valor não bater ao
+  testar, ajustar os aliases com uma amostra real.
+- **Credenciais de app de desenvolvedor Google Ads (dev token) e Meta (App
+  ID/App Secret)** — pré-requisito pra integração OAuth direta (sincronização
+  automática, sem upload manual). O cliente pediu essa opção (04/08/2026); hoje
+  só existe o card "Aguarda dev token"/"Aguarda App ID/secret" em Conexões,
+  sem fluxo de fato — mesma cautela do cliente HTTP Netshoes: não implementar
+  chutando um contrato de API que a gente não tem como testar.
 
 ### Roadmap Hooklab
 | # | Item | Estado |

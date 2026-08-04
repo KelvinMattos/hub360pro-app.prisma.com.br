@@ -224,6 +224,15 @@ const navigationConfig = [
         ]
     },
     {
+        title: 'ADS',
+        items: [
+            { label: 'Dashboard de ADS', route: 'ads.dashboard', icon: 'fa-solid fa-chart-line' },
+            { label: 'Contas de ADS', route: 'ads.accounts.index', icon: 'fa-solid fa-sliders' },
+            { label: 'Importar Google Ads', route: 'ads.import.show', params: { type: 'google_ads' }, icon: 'fa-brands fa-google' },
+            { label: 'Importar Meta Ads', route: 'ads.import.show', params: { type: 'meta_ads' }, icon: 'fa-brands fa-meta' },
+        ]
+    },
+    {
         title: 'Omnichannel',
         items: [
             { label: 'Dashboard Omni', route: 'marketplaces.dashboard', icon: 'fa-solid fa-chart-pie' },
@@ -273,6 +282,13 @@ const navigationConfig = [
                     { label: 'Vendas Centauro', route: 'order-channel.show', params: { type: 'centauro' }, icon: 'fa-solid fa-shirt' },
                     { label: 'Vendas Renner', route: 'order-channel.show', params: { type: 'renner' }, icon: 'fa-solid fa-store' },
                     { label: 'Vendas Magazine Luiza', route: 'order-channel.show', params: { type: 'magalu' }, icon: 'fa-solid fa-cart-shopping' },
+                ],
+            },
+            {
+                label: 'Importações de ADS',
+                items: [
+                    { label: 'Gastos Google Ads', route: 'ads.import.show', params: { type: 'google_ads' }, icon: 'fa-brands fa-google' },
+                    { label: 'Gastos Meta Ads', route: 'ads.import.show', params: { type: 'meta_ads' }, icon: 'fa-brands fa-meta' },
                 ],
             },
             {

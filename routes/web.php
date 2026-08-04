@@ -250,6 +250,26 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('/{account}', [\App\Http\Controllers\Sales\SalesChannelAccountController::class, 'destroy'])->name('destroy');
         });
 
+        // Monitoramento de ADS (Google Ads/Meta Ads) — cruza gasto x receita real via UTM
+        Route::prefix('ads')->name('ads.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Ads\AdsPerformanceController::class, 'index'])->name('dashboard');
+
+            Route::prefix('contas')->name('accounts.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Ads\AdAccountController::class, 'index'])->name('index');
+                Route::post('/', [\App\Http\Controllers\Ads\AdAccountController::class, 'store'])->name('store');
+                Route::patch('/{account}/toggle', [\App\Http\Controllers\Ads\AdAccountController::class, 'toggle'])->name('toggle');
+                Route::delete('/{account}', [\App\Http\Controllers\Ads\AdAccountController::class, 'destroy'])->name('destroy');
+            });
+
+            Route::prefix('importar')->name('import.')->group(function () {
+                Route::get('/{type}', [\App\Http\Controllers\Ads\AdsImportController::class, 'show'])
+                    ->whereIn('type', ['google_ads', 'meta_ads'])->name('show');
+                Route::post('/{type}', [\App\Http\Controllers\Ads\AdsImportController::class, 'import'])
+                    ->whereIn('type', ['google_ads', 'meta_ads'])->name('import');
+                Route::get('/progress/{token}', [\App\Http\Controllers\Ads\AdsImportController::class, 'progress'])->name('progress');
+            });
+        });
+
         // Pedidos e Etiquetas (atrás de feature flag — ver config/features.php)
         Route::middleware('feature:orders')->group(function () {
             Route::get('/orders', [OrderController::class , 'index'])->name('orders.index');
