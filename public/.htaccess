@@ -1,18 +1,3 @@
-<IfModule mod_security2.c>
-    # Callback OAuth2 (Mercado Livre, Google Ads): o retorno do provedor traz
-    # caracteres que o ModSecurity padrão do cPanel trata como suspeitos —
-    # "/" cru dentro do parâmetro "code" do Google e um esquema de URL
-    # completo dentro de "iss" (ex.: iss=https://accounts.google.com, que o
-    # Google Identity Services já manda por padrão). Isso derruba a request
-    # ANTES de chegar no Laravel, com "406 Not Acceptable" — não é bug de
-    # aplicação, é a WAF barrando o request na borda (mesma distinção de
-    # camada do CLAUDE.md §2.3: 419/403 do Netshoes já eram "transporte", não
-    # "coleta"). Desliga o ModSecurity só nessas duas rotas, não no site inteiro.
-    <If "%{REQUEST_URI} =~ m#^/(ml|google-ads)/callback#">
-        SecRuleEngine Off
-    </If>
-</IfModule>
-
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
