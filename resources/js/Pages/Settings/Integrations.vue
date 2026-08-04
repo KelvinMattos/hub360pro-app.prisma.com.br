@@ -209,30 +209,54 @@
                                     </div>
                                 </div>
 
+                                <div class="bg-blue-50 border border-blue-100 rounded-2xl px-6 py-4 mb-6 relative z-10 flex items-center justify-between gap-4">
+                                    <div>
+                                        <p class="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">URI de redirecionamento autorizado</p>
+                                        <p class="text-xs text-slate-600 font-semibold">Cole exatamente esta URL no OAuth Client ID (Cloud Console), em "URIs de redirecionamento autorizados" — sem isso o Google recusa a autorização.</p>
+                                        <code class="text-xs text-blue-700 font-bold break-all">{{ googleAdsRedirectUri }}</code>
+                                    </div>
+                                    <button type="button" @click="copyRedirectUri" class="shrink-0 bg-white border border-blue-200 text-blue-600 hover:bg-blue-100 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm">
+                                        <i :class="copied ? 'fa-solid fa-check' : 'fa-solid fa-copy'" class="mr-1.5"></i>{{ copied ? 'Copiado' : 'Copiar' }}
+                                    </button>
+                                </div>
+
                                 <form @submit.prevent="saveGoogleAdsKeys" class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
                                     <div class="space-y-3">
-                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center gap-2">
-                                            <i class="fa-solid fa-key"></i> Developer Token
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center justify-between gap-2">
+                                            <span class="flex items-center gap-2"><i class="fa-solid fa-key"></i> Developer Token</span>
+                                            <a href="https://ads.google.com/aw/apicenter" target="_blank" rel="noopener" class="text-blue-500 hover:text-blue-600 normal-case tracking-normal font-bold flex items-center gap-1">
+                                                Gerar no Google Ads <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                                            </a>
                                         </label>
                                         <input v-model="googleAdsForm.developer_token" type="password" class="w-full bg-slate-50 border border-black/5 focus:border-blue-500 focus:bg-white text-slate-800 rounded-3xl py-4 px-8 font-bold transition-all outline-none placeholder:text-slate-300" placeholder="••••••••••••••••••••••">
+                                        <p class="text-[10px] text-slate-400 font-semibold ml-4">Ferramentas e Config. → Configuração → Central da API (só aparece em conta gerenciadora/MCC).</p>
                                     </div>
                                     <div class="space-y-3">
-                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center gap-2">
-                                            <i class="fa-solid fa-id-badge"></i> OAuth Client ID
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center justify-between gap-2">
+                                            <span class="flex items-center gap-2"><i class="fa-solid fa-id-badge"></i> OAuth Client ID</span>
+                                            <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" class="text-blue-500 hover:text-blue-600 normal-case tracking-normal font-bold flex items-center gap-1">
+                                                Criar no Cloud Console <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                                            </a>
                                         </label>
                                         <input v-model="googleAdsForm.app_id" type="password" class="w-full bg-slate-50 border border-black/5 focus:border-blue-500 focus:bg-white text-slate-800 rounded-3xl py-4 px-8 font-bold transition-all outline-none placeholder:text-slate-300" placeholder="••••••••••••••••">
+                                        <p class="text-[10px] text-slate-400 font-semibold ml-4">Criar credenciais → ID do cliente OAuth → tipo "Aplicativo da Web". Client ID e Secret aparecem juntos.</p>
                                     </div>
                                     <div class="space-y-3">
                                         <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center gap-2">
                                             <i class="fa-solid fa-shield-halved"></i> OAuth Client Secret
                                         </label>
                                         <input v-model="googleAdsForm.client_secret" type="password" class="w-full bg-slate-50 border border-black/5 focus:border-blue-500 focus:bg-white text-slate-800 rounded-3xl py-4 px-8 font-bold transition-all outline-none placeholder:text-slate-300" placeholder="••••••••••••••••">
+                                        <p class="text-[10px] text-slate-400 font-semibold ml-4">Mesma tela do Client ID acima (Google Cloud Console → Credenciais).</p>
                                     </div>
                                     <div class="space-y-3">
-                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center gap-2">
-                                            <i class="fa-solid fa-sitemap"></i> Login Customer ID (opcional, se usa MCC)
+                                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 flex items-center justify-between gap-2">
+                                            <span class="flex items-center gap-2"><i class="fa-solid fa-sitemap"></i> Login Customer ID (opcional)</span>
+                                            <a href="https://ads.google.com/aw/overview" target="_blank" rel="noopener" class="text-blue-500 hover:text-blue-600 normal-case tracking-normal font-bold flex items-center gap-1">
+                                                Ver no Google Ads <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                                            </a>
                                         </label>
                                         <input v-model="googleAdsForm.login_customer_id" type="text" class="w-full bg-slate-50 border border-black/5 focus:border-blue-500 focus:bg-white text-slate-800 rounded-3xl py-4 px-8 font-bold transition-all outline-none placeholder:text-slate-300" placeholder="123-456-7890">
+                                        <p class="text-[10px] text-slate-400 font-semibold ml-4">Só preencha se as contas ficam sob uma conta gerenciadora (MCC) — é o ID dela, no canto superior direito do Google Ads.</p>
                                     </div>
 
                                     <div class="md:col-span-2 flex justify-end mt-4">
@@ -372,7 +396,7 @@
 </template>
 
 <script setup>
-import { reactive, watch, computed } from 'vue';
+import { reactive, watch, computed, ref } from 'vue';
 import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -396,6 +420,15 @@ const googleAdsForm = useForm({
     login_customer_id: props.integrations.google_ads?.login_customer_id || '',
 });
 const googleAdsAccounts = computed(() => props.credentials.filter(c => c.platform === 'google_ads'));
+const googleAdsRedirectUri = route('google-ads.callback');
+const copied = ref(false);
+const copyRedirectUri = async () => {
+    try {
+        await navigator.clipboard.writeText(googleAdsRedirectUri);
+        copied.value = true;
+        setTimeout(() => { copied.value = false; }, 2000);
+    } catch (e) { /* clipboard indisponível (http sem contexto seguro etc.) — o texto já está visível pra copiar manualmente */ }
+};
 
 // Financial Rules Form
 const financeForm = useForm({
