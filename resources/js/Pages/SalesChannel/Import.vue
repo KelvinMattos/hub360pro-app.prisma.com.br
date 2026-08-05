@@ -28,23 +28,31 @@
                 já importado pra aquele mesmo dia e canal — pedido importado sempre tem prioridade.
             </div>
 
+            <div class="bg-orange-50 border border-orange-200 text-orange-800 text-sm px-4 py-3 rounded-xl mb-6">
+                <i class="fa-solid fa-cloud-arrow-up mr-2"></i>
+                <strong>Amazon:</strong> também aceita direto o .csv do <strong>Painel de Vendas</strong>
+                (Seller Central → Business Reports → Sales Dashboard, botão "Baixar" com Data = Custom no
+                período desejado). O sistema reconhece o formato sozinho pelo conteúdo do arquivo — não precisa
+                escolher nada. Esse relatório traz valor e unidades por dia, mas não o número de pedidos.
+            </div>
+
             <div v-if="flash.error" class="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-6">
                 <i class="fa-solid fa-circle-exclamation mr-2"></i>{{ flash.error }}
             </div>
 
             <!-- Formulário de upload -->
             <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                <h2 class="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-4">Enviar arquivo (.xls ou .xlsx)</h2>
+                <h2 class="text-xs font-black uppercase tracking-[0.15em] text-slate-400 mb-4">Enviar arquivo (.xls, .xlsx ou .csv da Amazon)</h2>
 
                 <label :class="['dz block', form.file ? 'dz-filled' : '']" @dragover.prevent @drop.prevent="onDrop">
                     <div class="flex items-center gap-4">
                         <i :class="form.file ? 'fa-solid fa-file-circle-check text-emerald-500' : 'fa-solid fa-cloud-arrow-up text-slate-400'" class="text-3xl"></i>
                         <div>
-                            <div class="font-semibold text-slate-700">{{ form.file ? form.file.name : 'Clique ou arraste o arquivo .xls/.xlsx aqui' }}</div>
-                            <div class="text-xs text-slate-400 mt-0.5">{{ form.file ? fileSize(form.file.size) : 'Diário de Vendas por Canal · até 120 MB' }}</div>
+                            <div class="font-semibold text-slate-700">{{ form.file ? form.file.name : 'Clique ou arraste o arquivo aqui' }}</div>
+                            <div class="text-xs text-slate-400 mt-0.5">{{ form.file ? fileSize(form.file.size) : 'Diário de Vendas (.xls/.xlsx) ou Painel de Vendas Amazon (.csv) · até 120 MB' }}</div>
                         </div>
                     </div>
-                    <input type="file" accept=".xlsx,.xls" class="hidden" @change="onFile">
+                    <input type="file" accept=".xlsx,.xls,.csv" class="hidden" @change="onFile">
                 </label>
 
                 <div class="mt-6">

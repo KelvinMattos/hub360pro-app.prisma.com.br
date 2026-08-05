@@ -1,0 +1,20 @@
+﻿Painel de vendas
+Última atualização,August 03 2026 5:17:39 PM BRT
+
+Filtrar seleção
+Data,Custom
+Divisão de vendas,Total do site
+Gestão de logística,Ambos (Amazon e vendedor)
+
+Panorama de vendas
+Total de itens do pedido,Unidades pedidas,Vendas de produtos pedidos,Média de unidades por item do pedido,Média de vendas por item do pedido
+5,7,"R$ 1.000,00",1.4,142.86
+Comparar vendas - Exibição de gráfico
+Horário,Período selecionado (Vendas de produtos pedidos),Período selecionado (Unidades pedidas),Mesmo período um ano atrás (Vendas de produtos pedidos),Mesmo período um ano atrás (Unidades pedidas)
+2026-03-01T00:00:00,"R$ 500,00",3.0,"R$ 200,00",2.0
+2026-03-02T00:00:00,"R$ 0,00",0.0,"R$ 100,00",1.0
+2026-03-03T00:00:00,"R$ 500,50",4.0,"R$ 300,00",3.0
+Comparar vendas - Exibição de tabela
+,Total de itens do pedido,Unidades pedidas,Vendas de produtos pedidos,Média de unidades por item do pedido,Média de vendas por item do pedido
+Período selecionado,5,7,"R$ 1.000,50",1.4,142.93
+Mesmo período um ano atrás,3,6,"R$ 600,00",2.0,100.00
