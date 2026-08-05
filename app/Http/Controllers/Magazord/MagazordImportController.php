@@ -902,7 +902,15 @@ class MagazordImportController extends Controller
                 $docRaw = $this->col($row, ['CPF/CNPJ']);
                 $nameRaw = $this->col($row, ['Cliente']);
                 $emailRaw = $this->col($row, ['E-mail']);
-                $channelRaw = $this->col($row, ['Marketplace']) ?: $this->col($row, ['Loja']);
+                // "Marketplace"/"Loja" vêm vazios pra pedido do Site (não é
+                // marketplace) — nesse caso usa a coluna "Origem Pedido" do
+                // relatório geral (pedido do cliente 05/08/2026: "Site já
+                // está no relatório geral da Magazord, na coluna ORIGEM
+                // PEDIDO"). Valor "MANUAL" ali = venda online feita por
+                // vendedor em atendimento, ainda é canal Site — ver
+                // App\Support\SalesChannels::fromFreeText().
+                $channelRaw = $this->col($row, ['Marketplace']) ?: $this->col($row, ['Loja'])
+                    ?: $this->col($row, ['Origem Pedido', 'Origem do Pedido', 'Origem - Pedido', 'ORIGEM PEDIDO']);
 
                 $payload = [$keyCol => $externalId];
                 if ($nameCol)   $payload[$nameCol]   = $nameRaw;
@@ -1023,7 +1031,10 @@ class MagazordImportController extends Controller
                 $acrescimo = $this->brNumber($this->col($row, ['Vlr Acréscimo']));
                 $docRaw = $this->col($row, ['CPF/CNPJ']);
                 $nameRaw = $this->col($row, ['Pessoa']);
-                $channelRaw = $this->col($row, ['Origem']);
+                // "MANUAL" aqui = venda online feita por vendedor em
+                // atendimento, ainda é canal Site (pedido do cliente
+                // 05/08/2026) — ver App\Support\SalesChannels::fromFreeText().
+                $channelRaw = $this->col($row, ['Origem', 'Origem Pedido', 'Origem do Pedido', 'ORIGEM PEDIDO']);
                 $cityRaw = $this->col($row, ['Cidade']);
                 $stateRaw = $this->col($row, ['Estado']);
 

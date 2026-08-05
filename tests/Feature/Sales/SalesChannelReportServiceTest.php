@@ -120,6 +120,19 @@ class SalesChannelReportServiceTest extends TestCase
         $this->assertSame(650.0, $rows['site']['paid_value']);
     }
 
+    public function test_pedido_magazord_com_origem_manual_conta_como_site(): void
+    {
+        // "Origem Pedido" = MANUAL (importVendas/importVendasDetalhes do Magazord):
+        // venda online feita por vendedor em atendimento, ainda é canal Site.
+        $this->order(['selling_channel' => 'MANUAL', 'total_amount' => 90.0]);
+        $this->order(['selling_channel' => 'Site', 'total_amount' => 60.0]);
+
+        $rows = collect($this->service->daily($this->companyId, null, '2026-03-01', '2026-03-31'))->keyBy('channel');
+
+        $this->assertSame(150.0, $rows['site']['gross_value']);
+        $this->assertArrayNotHasKey('outros', $rows);
+    }
+
     public function test_canal_nao_reconhecido_cai_em_outros_em_vez_de_sumir(): void
     {
         $this->order(['selling_channel' => 'Canal Novo Que Ninguém Mapeou', 'total_amount' => 150.0]);

@@ -117,6 +117,17 @@ class SalesChannels
             return null;
         }
 
+        // Valor exato "MANUAL" na coluna "Origem Pedido" do relatório geral
+        // Magazord = venda online feita por vendedor em atendimento (pedido
+        // do cliente 05/08/2026: "são vendas online, mas feitas pelos
+        // vendedores em atendimento") — ainda é canal Site, só não é
+        // autoatendimento. Checado só aqui (não em fromSheetName) pra não
+        // arriscar casar com o nome de uma aba não relacionada do Diário de
+        // Vendas manual que por acaso contenha a palavra "Manual".
+        if (mb_strtoupper(trim(Str::ascii($raw))) === 'MANUAL') {
+            return 'site';
+        }
+
         return self::fromSheetName($raw);
     }
 }
