@@ -3,21 +3,42 @@
 namespace App\Services\Sales;
 
 use App\Models\ChannelSalesGoal;
+use App\Models\SalesChannelAccount;
 use App\Support\SalesChannels;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
- * Lê `channel_sales_daily` (gravada pelo SalesChannelDailyImportService) e
- * calcula as 4 visões que o cliente pedia na planilha manual "GERAL":
+ * Calcula as 4 visões que o cliente pedia na planilha manual "GERAL":
  * mensal (com comparativo ano a ano), semanal, diário e a granularidade de
  * conta Matriz/Filial do Mercado Livre.
  *
- * Tudo aqui é CALCULADO a partir da série diária, nunca duplicado numa
- * tabela própria — reimportar um mês corrige automaticamente todas as
- * visões derivadas. Comparação ano a ano só aparece quando o ano anterior
- * tem dado de fato importado; do contrário fica `null` (nunca fabrica um
- * "0%" ou uma variação que na verdade é "sem dado" — CLAUDE.md §2.2).
+ * Pedido do cliente (05/08/2026): "os relatórios que são importados [por
+ * canal] possuem as colunas de data de criação do pedido, status, data de
+ * pagamento — não há lógica em importar manualmente uma informação que
+ * outras planilhas já informaram". Antes desta mudança, a única fonte era o
+ * upload manual do "Diário de Vendas" gravado em `channel_sales_daily`
+ * (SalesChannelDailyImportService) — agora a fonte primária é `orders`,
+ * já populada automaticamente pelos importadores nativos por canal
+ * (OrderChannelImportController: Mercado Livre/Shopee/Centauro/Renner/
+ * Magazine Luiza) e pelos importadores de Vendas do Magazord/Netshoes.
+ *
+ * Regra de combinação, por (canal, dia): se existe pelo menos 1 pedido
+ * importado naquele dia/canal, ele SEMPRE vence — nunca mistura com o
+ * manual pra não contar a mesma venda duas vezes. O upload manual só
+ * preenche dias/canais em que ainda não existe nenhum pedido importado
+ * (ex.: canais sem importador nativo ainda — Site, Amazon, Dafiti, Casas
+ * Bahia, Shop Coopera — ver CLAUDE.md §8). Isso evita apagar o histórico
+ * desses canais enquanto não há de onde importar os pedidos deles.
+ *
+ * Pedidos cujo `selling_channel`/conta não bate com nenhum canal
+ * reconhecido (App\Support\SalesChannels::fromFreeText) caem no balde
+ * "outros" — nunca somem da tela (CLAUDE.md §2.1: nunca falhar em
+ * silêncio), o cliente vê e sinaliza se algum canal novo precisa de mapa.
+ *
+ * Comparação ano a ano só aparece quando o ano anterior tem dado de fato;
+ * do contrário fica `null` (nunca fabrica um "0%" — CLAUDE.md §2.2).
  */
 class SalesChannelReportService
 {
@@ -34,27 +55,16 @@ class SalesChannelReportService
         $start = Carbon::create($prevYear, 1, 1)->startOfDay();
         $end = Carbon::create($year, 12, 31)->endOfDay();
 
-        $rows = DB::table('channel_sales_daily')
-            ->select(
-                'channel',
-                DB::raw('YEAR(sale_date) as yr'),
-                DB::raw('MONTH(sale_date) as mo'),
-                DB::raw('SUM(gross_value) as gross_value'),
-                DB::raw('SUM(paid_value) as paid_value'),
-                DB::raw('SUM(canceled_value) as canceled_value'),
-                DB::raw('SUM(fees) as fees'),
-                DB::raw('SUM(shipping_cost) as shipping_cost'),
-                DB::raw('SUM(net_value) as net_value'),
-                DB::raw('SUM(orders_count) as orders_count')
-            )
-            ->where('company_id', $companyId)
-            ->whereBetween('sale_date', [$start, $end])
-            ->groupBy('channel', DB::raw('YEAR(sale_date)'), DB::raw('MONTH(sale_date)'))
-            ->get();
+        $daily = $this->unifiedDaily($companyId, $start, $end);
 
         $byChannelYearMonth = [];
-        foreach ($rows as $r) {
-            $byChannelYearMonth[$r->channel][(int) $r->yr][(int) $r->mo] = $this->rowToMetrics($r);
+        foreach ($daily as $row) {
+            $date = Carbon::parse($row['sale_date']);
+            $ch = $row['channel'];
+            $y = $date->year;
+            $m = $date->month;
+            $existing = $byChannelYearMonth[$ch][$y][$m] ?? null;
+            $byChannelYearMonth[$ch][$y][$m] = $existing ? $this->addMetrics($existing, $row) : $this->metricsOnly($row);
         }
 
         $channels = SalesChannels::all();
@@ -125,10 +135,7 @@ class SalesChannelReportService
         $start = Carbon::create($year, $month, 1)->startOfDay();
         $end = $start->copy()->endOfMonth()->endOfDay();
 
-        $rows = DB::table('channel_sales_daily')
-            ->where('company_id', $companyId)
-            ->whereBetween('sale_date', [$start, $end])
-            ->get(['channel', 'sale_date', 'paid_value', 'orders_count']);
+        $rows = array_values($this->unifiedDaily($companyId, $start, $end));
 
         $weekRanges = [];
         $cursor = $start->copy();
@@ -155,15 +162,15 @@ class SalesChannelReportService
         }
 
         foreach ($rows as $r) {
-            $date = Carbon::parse($r->sale_date)->startOfDay();
+            $date = Carbon::parse($r['sale_date'])->startOfDay();
             foreach ($weekRanges as $i => $range) {
                 if ($date->betweenIncluded($range['start']->copy()->startOfDay(), $range['end']->copy()->startOfDay())) {
-                    if (isset($weeks[$i]['channels'][$r->channel])) {
-                        $weeks[$i]['channels'][$r->channel]['value'] += (float) $r->paid_value;
-                        $weeks[$i]['channels'][$r->channel]['orders'] += (int) $r->orders_count;
+                    if (isset($weeks[$i]['channels'][$r['channel']])) {
+                        $weeks[$i]['channels'][$r['channel']]['value'] += (float) $r['paid_value'];
+                        $weeks[$i]['channels'][$r['channel']]['orders'] += (int) $r['orders_count'];
                     }
-                    $weeks[$i]['total']['value'] += (float) $r->paid_value;
-                    $weeks[$i]['total']['orders'] += (int) $r->orders_count;
+                    $weeks[$i]['total']['value'] += (float) $r['paid_value'];
+                    $weeks[$i]['total']['orders'] += (int) $r['orders_count'];
                     break;
                 }
             }
@@ -190,58 +197,50 @@ class SalesChannelReportService
 
     public function daily(int $companyId, ?string $channel, string $from, string $to): array
     {
-        $query = DB::table('channel_sales_daily')
-            ->where('company_id', $companyId)
-            ->whereBetween('sale_date', [$from, $to]);
+        $rows = $this->unifiedDaily($companyId, Carbon::parse($from)->startOfDay(), Carbon::parse($to)->endOfDay());
 
-        if ($channel) {
-            $query->where('channel', $channel);
+        $out = [];
+        foreach ($rows as $r) {
+            if ($channel && $r['channel'] !== $channel) {
+                continue;
+            }
+            $out[] = [
+                'channel' => $r['channel'],
+                'channel_label' => SalesChannels::label($r['channel']),
+                'sale_date' => $r['sale_date'],
+                'gross_value' => (float) $r['gross_value'],
+                'paid_value' => (float) $r['paid_value'],
+                'canceled_value' => (float) $r['canceled_value'],
+                'effectiveness_rate' => $r['gross_value'] > 0 ? round($r['paid_value'] / $r['gross_value'], 4) : null,
+                'fees' => (float) $r['fees'],
+                'shipping_cost' => (float) $r['shipping_cost'],
+                'net_value' => (float) $r['net_value'],
+                'orders_count' => (int) $r['orders_count'],
+            ];
         }
 
-        $rows = $query->orderBy('sale_date')->orderBy('channel')->get();
+        usort($out, fn ($a, $b) => [$a['sale_date'], $a['channel']] <=> [$b['sale_date'], $b['channel']]);
 
-        return $rows->map(function ($r) {
-            return [
-                'channel' => $r->channel,
-                'channel_label' => SalesChannels::label($r->channel),
-                'sale_date' => Carbon::parse($r->sale_date)->format('Y-m-d'),
-                'gross_value' => (float) $r->gross_value,
-                'paid_value' => (float) $r->paid_value,
-                'canceled_value' => (float) $r->canceled_value,
-                'effectiveness_rate' => $r->gross_value > 0 ? round($r->paid_value / $r->gross_value, 4) : null,
-                'fees' => (float) $r->fees,
-                'shipping_cost' => (float) $r->shipping_cost,
-                'net_value' => (float) $r->net_value,
-                'orders_count' => (int) $r->orders_count,
-            ];
-        })->values()->all();
+        return $out;
     }
 
     /* ================= CONTA MERCADO LIVRE (Matriz x Filial) ================= */
 
     public function mercadoLivreAccounts(int $companyId, int $year): array
     {
-        $rows = DB::table('channel_sales_daily')
-            ->select(
-                'channel',
-                DB::raw('MONTH(sale_date) as mo'),
-                DB::raw('SUM(gross_value) as gross_value'),
-                DB::raw('SUM(paid_value) as paid_value'),
-                DB::raw('SUM(canceled_value) as canceled_value'),
-                DB::raw('SUM(fees) as fees'),
-                DB::raw('SUM(shipping_cost) as shipping_cost'),
-                DB::raw('SUM(net_value) as net_value'),
-                DB::raw('SUM(orders_count) as orders_count')
-            )
-            ->where('company_id', $companyId)
-            ->whereIn('channel', SalesChannels::MERCADO_LIVRE_GROUP)
-            ->whereYear('sale_date', $year)
-            ->groupBy('channel', DB::raw('MONTH(sale_date)'))
-            ->get();
+        $start = Carbon::create($year, 1, 1)->startOfDay();
+        $end = Carbon::create($year, 12, 31)->endOfDay();
+
+        $daily = $this->unifiedDaily($companyId, $start, $end);
 
         $byAccountMonth = [];
-        foreach ($rows as $r) {
-            $byAccountMonth[$r->channel][(int) $r->mo] = $this->rowToMetrics($r);
+        foreach ($daily as $row) {
+            if (!in_array($row['channel'], SalesChannels::MERCADO_LIVRE_GROUP, true)) {
+                continue;
+            }
+            $m = Carbon::parse($row['sale_date'])->month;
+            $existing = $byAccountMonth[$row['channel']][$m] ?? null;
+            $byAccountMonth[$row['channel']][$m] = $existing ? $this->addMetrics($existing, $row) : $this->metricsOnly($row);
         }
 
         $result = [];
@@ -284,17 +283,196 @@ class SalesChannelReportService
 
     /* ================= internos ================= */
 
-    private function rowToMetrics(object $row): array
+    /**
+     * Série diária por canal no intervalo, combinando as duas fontes: pedidos
+     * importados (`orders`, prioridade) e o upload manual do Diário de Vendas
+     * (`channel_sales_daily`, só preenche o que não tem pedido). Chave:
+     * "{canal}|{Y-m-d}" — no máximo 1 linha por canal/dia, nunca soma as
+     * duas fontes juntas (evitaria contar a mesma venda 2x).
+     *
+     * @return array<string, array{channel:string, sale_date:string, gross_value:float, paid_value:float, canceled_value:float, fees:float, shipping_cost:float, net_value:float, orders_count:int}>
+     */
+    private function unifiedDaily(int $companyId, Carbon $start, Carbon $end): array
+    {
+        $out = $this->ordersDerivedDaily($companyId, $start, $end);
+
+        foreach ($this->manualDaily($companyId, $start, $end) as $key => $row) {
+            if (!isset($out[$key])) {
+                $out[$key] = $row;
+            }
+        }
+
+        return $out;
+    }
+
+    /** Agrega `orders` por dia/canal — fonte automática (pedido do cliente 05/08/2026). */
+    private function ordersDerivedDaily(int $companyId, Carbon $start, Carbon $end): array
+    {
+        if (!Schema::hasTable('orders')) {
+            return [];
+        }
+        $cols = Schema::getColumnListing('orders');
+        if (!in_array('total_amount', $cols, true)) {
+            return [];
+        }
+
+        $dateCol = collect(['date_created', 'order_date', 'created_at'])->first(fn ($c) => in_array($c, $cols, true));
+        if (!$dateCol) {
+            return [];
+        }
+
+        $hasCompany = in_array('company_id', $cols, true);
+        $statusCol = in_array('status', $cols, true) ? 'status' : null;
+        $channelCol = in_array('selling_channel', $cols, true) ? 'selling_channel' : null;
+        $accountCol = in_array('sales_channel_account_id', $cols, true) ? 'sales_channel_account_id' : null;
+        $feeCol = in_array('marketplace_fee', $cols, true) ? 'marketplace_fee' : null;
+        $shipCol = in_array('shipping_cost', $cols, true) ? 'shipping_cost' : null;
+
+        $q = DB::table('orders')
+            ->whereRaw("DATE($dateCol) BETWEEN ? AND ?", [$start->format('Y-m-d'), $end->format('Y-m-d')]);
+        if ($hasCompany) {
+            $q->where('company_id', $companyId);
+        }
+
+        $channelExpr = $channelCol ?: 'NULL';
+        $accountExpr = $accountCol ?: 'NULL';
+        $statusExpr = $statusCol ?: 'NULL';
+
+        $q->select([
+            DB::raw("DATE($dateCol) as d"),
+            DB::raw("$channelExpr as raw_channel"),
+            DB::raw("$accountExpr as account_id"),
+            DB::raw("$statusExpr as ord_status"),
+            DB::raw('SUM(total_amount) as total'),
+            $feeCol ? DB::raw("SUM($feeCol) as fee") : DB::raw('0 as fee'),
+            $shipCol ? DB::raw("SUM($shipCol) as ship") : DB::raw('0 as ship'),
+            DB::raw('COUNT(*) as cnt'),
+        ])->groupBy(
+            DB::raw("DATE($dateCol)"),
+            DB::raw($channelExpr),
+            DB::raw($accountExpr),
+            DB::raw($statusExpr)
+        );
+
+        $rows = $q->get();
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        $accountsById = $accountCol
+            ? SalesChannelAccount::where('company_id', $companyId)->get(['id', 'channel', 'label'])->keyBy('id')
+            : collect();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $canonical = $this->resolveChannelKey($r->raw_channel, $r->account_id !== null ? (int) $r->account_id : null, $accountsById)
+                ?? 'outros';
+            $date = (string) $r->d;
+            $key = $canonical . '|' . $date;
+
+            $bucket = $out[$key] ?? $this->emptyMetricsRow($canonical, $date);
+            $bucket['gross_value'] += (float) $r->total;
+
+            if ($statusCol && mb_strtolower((string) $r->ord_status) === 'cancelled') {
+                $bucket['canceled_value'] += (float) $r->total;
+            } else {
+                $bucket['fees'] += (float) $r->fee;
+                $bucket['shipping_cost'] += (float) $r->ship;
+                $bucket['orders_count'] += (int) $r->cnt;
+            }
+
+            $out[$key] = $bucket;
+        }
+
+        foreach ($out as $key => &$row) {
+            $row['paid_value'] = $row['gross_value'] - $row['canceled_value'];
+            $row['net_value'] = $row['paid_value'] - $row['fees'] - $row['shipping_cost'];
+        }
+        unset($row);
+
+        return $out;
+    }
+
+    /**
+     * Resolve o canal canônico de um pedido, priorizando a conta cadastrada
+     * (`sales_channel_accounts.channel`, escolhida pelo usuário na importação
+     * — fonte mais confiável) sobre o texto livre de `selling_channel`. Pra
+     * Mercado Livre, tenta ainda distinguir Matriz/Filial pelo rótulo da
+     * conta; sem isso, cai no balde genérico `mercado_livre`.
+     */
+    private function resolveChannelKey(?string $rawChannel, ?int $accountId, \Illuminate\Support\Collection $accountsById): ?string
+    {
+        if ($accountId !== null && $accountsById->has($accountId)) {
+            $account = $accountsById->get($accountId);
+
+            if ($account->channel === 'mercado_livre') {
+                $byLabel = SalesChannels::fromFreeText($account->label);
+                if (in_array($byLabel, ['mercado_livre_matriz', 'mercado_livre_filial'], true)) {
+                    return $byLabel;
+                }
+
+                return 'mercado_livre';
+            }
+
+            $direct = match ($account->channel) {
+                'shopee' => 'shopee',
+                'centauro' => 'centauro',
+                'renner' => 'renner',
+                'magalu' => 'magalu',
+                default => null,
+            };
+            if ($direct !== null) {
+                return $direct;
+            }
+        }
+
+        return SalesChannels::fromFreeText($rawChannel);
+    }
+
+    /** Fallback: dias/canais do Diário de Vendas importado manualmente sem nenhum pedido correspondente em `orders`. */
+    private function manualDaily(int $companyId, Carbon $start, Carbon $end): array
+    {
+        if (!Schema::hasTable('channel_sales_daily')) {
+            return [];
+        }
+
+        $rows = DB::table('channel_sales_daily')
+            ->where('company_id', $companyId)
+            ->whereBetween('sale_date', [$start->format('Y-m-d'), $end->format('Y-m-d')])
+            ->get();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $date = Carbon::parse($r->sale_date)->format('Y-m-d');
+            $out[$r->channel . '|' . $date] = [
+                'channel' => $r->channel,
+                'sale_date' => $date,
+                'gross_value' => (float) $r->gross_value,
+                'paid_value' => (float) $r->paid_value,
+                'canceled_value' => (float) $r->canceled_value,
+                'fees' => (float) $r->fees,
+                'shipping_cost' => (float) $r->shipping_cost,
+                'net_value' => (float) $r->net_value,
+                'orders_count' => (int) $r->orders_count,
+            ];
+        }
+
+        return $out;
+    }
+
+    private function emptyMetricsRow(string $channel, string $date): array
     {
         return [
-            'gross_value' => (float) $row->gross_value,
-            'paid_value' => (float) $row->paid_value,
-            'canceled_value' => (float) $row->canceled_value,
-            'fees' => (float) $row->fees,
-            'shipping_cost' => (float) $row->shipping_cost,
-            'net_value' => (float) $row->net_value,
-            'orders_count' => (int) $row->orders_count,
+            'channel' => $channel, 'sale_date' => $date,
+            'gross_value' => 0.0, 'paid_value' => 0.0, 'canceled_value' => 0.0,
+            'fees' => 0.0, 'shipping_cost' => 0.0, 'net_value' => 0.0, 'orders_count' => 0,
         ];
+    }
+
+    /** Descarta as chaves de identidade (channel/sale_date), deixando só as métricas somáveis. */
+    private function metricsOnly(array $row): array
+    {
+        return array_intersect_key($row, array_flip(self::METRICS));
     }
 
     private function addMetrics(?array $a, array $b): array

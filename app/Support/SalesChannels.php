@@ -22,6 +22,7 @@ class SalesChannels
     public const LABELS = [
         'mercado_livre_matriz' => 'Mercado Livre - Matriz',
         'mercado_livre_filial' => 'Mercado Livre - Filial',
+        'mercado_livre' => 'Mercado Livre',
         'netshoes' => 'Netshoes',
         'netshoes_full' => 'Netshoes FULL',
         'centauro' => 'Centauro',
@@ -34,10 +35,17 @@ class SalesChannels
         'dafiti' => 'Dafiti',
         'shop_coopera' => 'Shop Coopera',
         'fba_amazon' => 'FBA Amazon',
+        'outros' => 'Outros / Não identificado',
     ];
 
-    /** Canais que, somados, formam o "Mercado Livre" consolidado do dashboard Geral. */
-    public const MERCADO_LIVRE_GROUP = ['mercado_livre_matriz', 'mercado_livre_filial'];
+    /**
+     * Canais que, somados, formam o "Mercado Livre" consolidado do dashboard Geral.
+     * `mercado_livre` (genérico) entra aqui também: é o balde de pedidos importados
+     * automaticamente cuja conta (Matriz/Filial) não deu pra identificar — ainda assim
+     * é venda do Mercado Livre e precisa contar no total, só não aparece separado por
+     * conta na aba "Conta Mercado Livre".
+     */
+    public const MERCADO_LIVRE_GROUP = ['mercado_livre_matriz', 'mercado_livre_filial', 'mercado_livre'];
 
     public static function label(string $channel): string
     {
@@ -85,7 +93,30 @@ class SalesChannels
             str_contains($n, 'VIA VAREJO') || str_contains($n, 'CASAS BAHIA') => 'casas_bahia',
             str_contains($n, 'DAFITI') => 'dafiti',
             str_contains($n, 'SHOP COOPERA') || str_contains($n, 'SHOPCOOPERA') => 'shop_coopera',
+            // Mercado Livre sem indicação de conta (Matriz/Filial) — só cai aqui
+            // depois de checar os dois casos específicos acima.
+            str_contains($n, 'MERCADO LIVRE') || str_contains($n, 'MERCADOLIVRE') => 'mercado_livre',
             default => null,
         };
+    }
+
+    /**
+     * Mesmo casamento por palavra-chave de {@see fromSheetName()}, mas usado
+     * pra texto livre gravado em `orders.selling_channel` pelos importadores
+     * nativos por canal (cada um grava o que faz sentido pro seu export —
+     * "Mercado Livre", "Magazine Luiza", "Shopee" etc., ver
+     * OrderChannelImportController/NetshoesImportController/MagazordImportController),
+     * usado pela Central de Desempenho por Canal pra classificar pedidos
+     * automaticamente sem depender de upload manual (pedido do cliente
+     * 05/08/2026: "não há lógica em importar manualmente uma informação que
+     * outras planilhas já informaram").
+     */
+    public static function fromFreeText(?string $raw): ?string
+    {
+        if ($raw === null || trim($raw) === '') {
+            return null;
+        }
+
+        return self::fromSheetName($raw);
     }
 }

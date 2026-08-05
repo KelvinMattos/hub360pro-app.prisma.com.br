@@ -12,11 +12,12 @@
                         Desempenho por Canal
                     </h1>
                     <p class="text-slate-500 mt-2 font-medium">
-                        Mensal, semanal, diário e conta Mercado Livre — calculados a partir do Diário de Vendas importado.
+                        Mensal, semanal, diário e conta Mercado Livre — preenchidos automaticamente a partir dos pedidos
+                        já importados de cada canal (data, status e pagamento reais, sem digitação manual).
                     </p>
                 </div>
                 <Link :href="route('sales.channel-import.show')" class="btn-secondary shrink-0">
-                    <i class="fa-solid fa-file-import mr-2"></i> Importar Diário de Vendas
+                    <i class="fa-solid fa-file-import mr-2"></i> Diário de Vendas (canais sem importador automático)
                 </Link>
             </div>
 

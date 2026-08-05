@@ -11,9 +11,10 @@
                     Importar Vendas Diárias por Canal
                 </h1>
                 <p class="text-slate-500 mt-2 font-medium">
-                    Envie o arquivo "Diário de Vendas" (uma aba por canal, uma linha por dia). Os totais mensais,
-                    semanais e o comparativo ano a ano do Desempenho por Canal são recalculados automaticamente
-                    a partir dessa base — não é preciso reimportar nada além do diário.
+                    O Desempenho por Canal já é preenchido automaticamente a partir dos pedidos importados de cada
+                    canal (Mercado Livre, Shopee, Centauro, Renner, Magazine Luiza, Netshoes) — essa planilha só é
+                    necessária pra canais que ainda não têm importador de pedidos (Site, Amazon, Grupo Casas Bahia,
+                    Dafiti, Shop Coopera, FBA Amazon) ou pra preencher um histórico anterior à importação de pedidos.
                 </p>
             </div>
 
@@ -22,7 +23,9 @@
                 Cada aba da planilha vira um canal (Mercado Livre Matriz/Filial, Netshoes, Centauro, Site, Amazon,
                 Shopee, Renner, Magalu, Grupo Casas Bahia, Dafiti, Shop Coopera, FBA Amazon...). Abas com nome não
                 reconhecido são ignoradas e reportadas no resultado — nada é gravado às cegas. A data de cada linha
-                vem da própria planilha; reimportar um mês já enviado atualiza os valores em vez de duplicar.
+                vem da própria planilha; reimportar um mês já enviado atualiza os valores em vez de duplicar. Um
+                dia/canal só entra no Desempenho por Canal a partir desta planilha quando não existe nenhum pedido
+                já importado pra aquele mesmo dia e canal — pedido importado sempre tem prioridade.
             </div>
 
             <div v-if="flash.error" class="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-6">
